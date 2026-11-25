@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Wifi } from 'lucide-react';
+import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Wifi, Home } from 'lucide-react';
 
 interface NavbarProps {
   isAuthenticated: boolean;
@@ -58,7 +58,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Zone 3: Actions */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <button
+          onClick={() => { window.location.href = '/'; }}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors border border-slate-200 dark:border-slate-800"
+          title="Volver al Launcher / Hub"
+        >
+          <Home className="w-4 h-4 text-blue-500" />
+          <span className="hidden md:inline">Inicio / Hub</span>
+        </button>
+
         <button
           onClick={onOpenSettings}
           className="p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
