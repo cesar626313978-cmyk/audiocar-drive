@@ -1,0 +1,6 @@
+{
+  "name": "AudioCar Drive",
+  "description": "Tesla-optimized Google Drive streaming music player with dual-player crossfade, anti-tunnel IndexedDB cache, and QR/OAuth authentication.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
