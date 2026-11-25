@@ -199,12 +199,12 @@ export class GoogleDriveService {
     }
   }
 
-  private static async fetchFolderRecursive(token: string, folderId: string): Promise<PlaylistFolder> {
+  private static async fetchFolderRecursive(token: string, folderId: string, currentFolderName = 'mimusica'): Promise<PlaylistFolder> {
     const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,modifiedTime)&includeItemsFromAllDrives=true&supportsAllDrives=true&pageSize=200`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,modifiedTime)&includeItemsFromAllDrives=true&supportsAllDrives=true&pageSize=500`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return { id: folderId, name: 'mimusica', tracks: [] };
+    if (!res.ok) return { id: folderId, name: currentFolderName, tracks: [] };
     const data = await res.json();
 
     const tracks: Track[] = [];
@@ -212,7 +212,7 @@ export class GoogleDriveService {
 
     for (const file of (data.files || [])) {
       if (file.mimeType === 'application/vnd.google-apps.folder') {
-        subfolderPromises.push(this.fetchFolderRecursive(token, file.id));
+        subfolderPromises.push(this.fetchFolderRecursive(token, file.id, file.name));
       } else if (
         file.mimeType?.includes('audio') ||
         file.name.match(/\.(mp3|flac|wav|m4a|ogg)$/i)
@@ -225,31 +225,24 @@ export class GoogleDriveService {
           size: file.size ? Number(file.size) : undefined,
           modifiedTime: file.modifiedTime,
           downloadUrl: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
-          parentId: folderId
+          parentId: folderId,
+          album: currentFolderName === 'mimusica' ? 'mimusica' : currentFolderName,
+          artist: currentFolderName === 'mimusica' ? 'Google Drive' : currentFolderName
         });
       }
     }
 
-    const subfolders = await Promise.all(subfolderPromises);
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    tracks.sort((a, b) => collator.compare(a.name, b.name));
 
-    // Also include tracks from subfolders into the subfolder PlaylistFolder item
-    const resolvedSubfolders: PlaylistFolder[] = [];
-    for (let i = 0; i < subfolders.length; i++) {
-      const sub = subfolders[i];
-      const originalFile = data.files.find((f: any) => f.id === sub.id);
-      resolvedSubfolders.push({
-        id: sub.id,
-        name: originalFile ? originalFile.name : 'Subfolder',
-        tracks: sub.tracks,
-        subfolders: sub.subfolders
-      });
-    }
+    const subfolders = await Promise.all(subfolderPromises);
+    subfolders.sort((a, b) => collator.compare(a.name, b.name));
 
     return {
       id: folderId,
-      name: 'mimusica',
+      name: currentFolderName,
       tracks,
-      subfolders: resolvedSubfolders
+      subfolders
     };
   }
 
