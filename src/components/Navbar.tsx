@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
-          <span>Scope: drive.file</span>
+          <span>Scope: drive.readonly · mimusica</span>
         </div>
       </div>
 
@@ -83,20 +83,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
         </button>
 
-        {isAuthenticated || isDemoMode ? (
+        {isAuthenticated ? (
           <button
             onClick={onLogout}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors border border-rose-500/20"
           >
             <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Disconnect</span>
+            <span className="hidden sm:inline">Desconectar</span>
           </button>
         ) : (
           <button
             onClick={onOpenLogin}
             className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/20 transition-colors"
           >
-            Connect Drive / QR
+            Conectar Google Drive
           </button>
         )}
       </div>

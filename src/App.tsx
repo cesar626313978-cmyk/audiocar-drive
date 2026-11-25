@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Track, PlaylistFolder, AudioSettings, PlaybackState } from './types/audio';
-import { GoogleDriveService, DEMO_PLAYLISTS, DEMO_TRACKS } from './services/drive';
+import { GoogleDriveAuth, GoogleDriveService } from './services/drive';
 import { audioEngine } from './services/audioEngine';
 import { AudioCacheDB } from './services/db';
 import { Navbar } from './components/Navbar';
@@ -9,15 +9,19 @@ import { PlayerPanel } from './components/PlayerPanel';
 import { DrivingHUD } from './components/DrivingHUD';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { Menu, X } from 'lucide-react';
+import { X, FolderSearch, AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
   const [token, setToken] = useState<string | null>(null);
-  const [folderName, setFolderName] = useState<string>('Mi música (Demo)');
-  const [library, setLibrary] = useState<PlaylistFolder>(DEMO_PLAYLISTS[0]);
+  const [folderName, setFolderName] = useState<string>('mimusica (Drive)');
+  const [library, setLibrary] = useState<PlaylistFolder>({
+    id: 'root-empty',
+    name: 'mimusica',
+    tracks: []
+  });
+  const [folderNotFound, setFolderNotFound] = useState<boolean>(false);
   const [cacheSize, setCacheSize] = useState<string>('0.0');
 
   const [settings, setSettings] = useState<AudioSettings>({
@@ -33,21 +37,21 @@ export default function App() {
     currentTime: 0,
     duration: 0,
     currentTrack: null,
-    queue: DEMO_TRACKS,
+    queue: [],
     queueIndex: 0,
     repeatMode: 'off',
     shuffle: false,
-    isOffline: true,
+    isOffline: false,
     activePlayer: 'A',
     volume: 0.8
   });
 
-  const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set(['demo-1', 'demo-2']));
+  const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
 
-  // Initialize audio engine callbacks and settings
+  // Initialize audio engine callbacks and settings on mount
   useEffect(() => {
     audioEngine.setCallbacks(
       (time, duration) => {
@@ -62,37 +66,81 @@ export default function App() {
     );
 
     audioEngine.updateSettings(settings);
-
-    // Load cache size
     AudioCacheDB.getCacheSizeMB().then(setCacheSize);
 
-    // Check stored token or default to demo
-    const storedToken = GoogleDriveService.getStoredToken();
-    if (storedToken) {
-      setToken(storedToken);
-      setIsAuthenticated(true);
-      setIsDemoMode(false);
-      initDriveLibrary(storedToken);
-    }
+    // Attempt autoconnection / silent renewal
+    checkAndRestoreSession();
   }, []);
 
-  const initDriveLibrary = async (authToken: string) => {
+  const checkAndRestoreSession = async () => {
+    let activeToken = GoogleDriveAuth.getStoredToken();
+    if (!activeToken) {
+      // Try silent refresh
+      activeToken = await GoogleDriveAuth.silentRefresh();
+    }
+
+    if (activeToken) {
+      setToken(activeToken);
+      setIsAuthenticated(true);
+      initMimusicaLibrary(activeToken);
+    } else {
+      // If no clientId configured, prompt login modal
+      const clientId = GoogleDriveAuth.getStoredClientId();
+      if (!clientId) {
+        setIsLoginOpen(true);
+      }
+    }
+  };
+
+  const initMimusicaLibrary = async (authToken: string) => {
     try {
-      const folderId = await GoogleDriveService.findOrCreateMusicFolder(authToken);
-      const fetchedLib = await GoogleDriveService.fetchLibrary(authToken, folderId);
+      const folderId = await GoogleDriveService.findMimusicaFolder(authToken);
+      if (!folderId) {
+        setFolderNotFound(true);
+        return;
+      }
+      setFolderNotFound(false);
+      const fetchedLib = await GoogleDriveService.fetchMimusicaLibrary(authToken, folderId);
       setLibrary(fetchedLib);
-      setFolderName('Mi música');
+      
       const all: Track[] = [];
       const collect = (f: PlaylistFolder) => {
         all.push(...f.tracks);
         f.subfolders?.forEach(collect);
       };
       collect(fetchedLib);
+
       if (all.length > 0) {
         setPlaybackState(prev => ({ ...prev, queue: all }));
       }
+    } catch (e: any) {
+      console.error('Failed to load Google Drive library:', e);
+      if (e.message === 'UNAUTHORIZED') {
+        // Try silent refresh once
+        const freshToken = await GoogleDriveAuth.silentRefresh();
+        if (freshToken) {
+          setToken(freshToken);
+          initMimusicaLibrary(freshToken);
+        } else {
+          setIsAuthenticated(false);
+          setIsLoginOpen(true);
+        }
+      }
+    }
+  };
+
+  const handleConnectDrive = async (clientId: string) => {
+    try {
+      const tokenClient = await GoogleDriveAuth.initTokenClient(clientId, (resp) => {
+        if (resp && resp.access_token) {
+          setToken(resp.access_token);
+          setIsAuthenticated(true);
+          initMimusicaLibrary(resp.access_token);
+        }
+      });
+      tokenClient.requestAccessToken();
     } catch (e) {
-      console.warn('Failed to load Google Drive library:', e);
+      console.error('Failed to initialize Google token client:', e);
     }
   };
 
@@ -105,13 +153,25 @@ export default function App() {
       queueIndex: index >= 0 ? index : 0
     }));
 
+    if (!token) return;
+
     try {
       await audioEngine.playTrack(track, token, settings);
       setPlaybackState(prev => ({ ...prev, isPlaying: true }));
-      // Pre-warm ahead
       audioEngine.prewarmNextTracks(queueList, index >= 0 ? index : 0, token, settings.bufferAheadCount);
-    } catch (e) {
-      console.error('Play track error:', e);
+    } catch (e: any) {
+      if (e.message === 'UNAUTHORIZED') {
+        const fresh = await GoogleDriveAuth.silentRefresh();
+        if (fresh) {
+          setToken(fresh);
+          handleSelectTrack(track, queueList);
+        } else {
+          setIsAuthenticated(false);
+          setIsLoginOpen(true);
+        }
+      } else {
+        console.error('Play track error:', e);
+      }
     }
   };
 
@@ -135,7 +195,7 @@ export default function App() {
       if (repeatMode === 'all') {
         nextIndex = 0;
       } else {
-        return; // stop at end
+        return;
       }
     }
 
@@ -180,6 +240,7 @@ export default function App() {
   };
 
   const handleDownloadTrack = async (track: Track) => {
+    if (!token) return;
     try {
       const blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token);
       await AudioCacheDB.saveBlob(track.id, blob);
@@ -209,21 +270,43 @@ export default function App() {
       <Navbar
         isAuthenticated={isAuthenticated}
         folderName={folderName}
-        isDemoMode={isDemoMode}
+        isDemoMode={false}
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenLogin={() => {
+          const clientId = GoogleDriveAuth.getStoredClientId();
+          if (clientId) {
+            handleConnectDrive(clientId);
+          } else {
+            setIsLoginOpen(true);
+          }
+        }}
         onLogout={() => {
-          GoogleDriveService.clearStoredToken();
+          GoogleDriveAuth.revokeToken();
           setToken(null);
           setIsAuthenticated(false);
-          setIsDemoMode(true);
-          setLibrary(DEMO_PLAYLISTS[0]);
-          setFolderName('Mi música (Demo)');
+          setLibrary({ id: 'empty', name: 'mimusica', tracks: [] });
+          setPlaybackState(prev => ({ ...prev, queue: [], currentTrack: null, isPlaying: false }));
         }}
         cacheSize={cacheSize}
       />
+
+      {/* Folder Not Found Warning Banner */}
+      {isAuthenticated && folderNotFound && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between text-amber-300 text-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>No se encontró la carpeta <strong className="font-semibold text-white">mimusica</strong> en la raíz de tu Google Drive. Por favor, créala e introduce tus canciones.</span>
+          </div>
+          <button
+            onClick={() => token && initMimusicaLibrary(token)}
+            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg font-medium transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* Main Responsive Grid Layout (Tesla Park / Desktop vs Drive) */}
       <main className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] w-full mx-auto pb-24 lg:pb-6">
@@ -231,7 +314,7 @@ export default function App() {
         <div className={`lg:col-span-5 xl:col-span-4 h-[calc(100vh-140px)] ${isMobileDrawerOpen ? 'fixed inset-x-4 top-20 z-50 bg-slate-950/95 p-4 rounded-3xl border border-slate-800 shadow-2xl' : 'hidden lg:block'}`}>
           {isMobileDrawerOpen && (
             <div className="flex justify-between items-center mb-4 lg:hidden">
-              <h3 className="font-bold text-white">Music Library</h3>
+              <h3 className="font-bold text-white">mimusica Library</h3>
               <button onClick={() => setIsMobileDrawerOpen(false)} className="p-2 text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
@@ -305,19 +388,8 @@ export default function App() {
       <LoginModal
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
-        onLoginWithToken={(tok) => {
-          GoogleDriveService.setStoredToken(tok);
-          setToken(tok);
-          setIsAuthenticated(true);
-          setIsDemoMode(false);
-          initDriveLibrary(tok);
-        }}
-        onEnableDemoMode={() => {
-          setIsDemoMode(true);
-          setIsAuthenticated(false);
-          setLibrary(DEMO_PLAYLISTS[0]);
-          setFolderName('Mi música (Demo)');
-          setPlaybackState(prev => ({ ...prev, queue: DEMO_TRACKS }));
+        onConnectDrive={(clientId) => {
+          handleConnectDrive(clientId);
         }}
       />
     </div>

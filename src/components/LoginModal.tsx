@@ -1,27 +1,21 @@
 import React, { useState } from 'react';
-import { X, QrCode, Key, ShieldCheck, Disc3, Sparkles } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { X, ShieldCheck, Disc3, Key, ExternalLink } from 'lucide-react';
+import { GoogleDriveAuth } from '../services/drive';
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLoginWithToken: (token: string) => void;
-  onEnableDemoMode: () => void;
+  onConnectDrive: (clientId: string) => void;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
   isOpen,
   onClose,
-  onLoginWithToken,
-  onEnableDemoMode
+  onConnectDrive
 }) => {
-  const [activeTab, setActiveTab] = useState<'qr' | 'token' | 'demo'>('demo');
-  const [inputToken, setInputToken] = useState<string>('');
+  const [clientIdInput, setClientIdInput] = useState<string>(GoogleDriveAuth.getStoredClientId() || '');
 
   if (!isOpen) return null;
-
-  const sessionId = Math.random().toString(36).substring(2, 9);
-  const pairingUrl = `${window.location.origin}/auth/confirm?session=${sessionId}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
@@ -32,8 +26,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <Disc3 className="w-6 h-6 animate-spin-slow" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Connect Google Drive</h2>
-              <p className="text-xs text-slate-400">Restricted drive.file scope authentication</p>
+              <h2 className="text-lg font-bold text-white">Google Drive (`mimusica`)</h2>
+              <p className="text-xs text-slate-400">Conexión OAuth 2.0 en solo lectura</p>
             </div>
           </div>
           <button
@@ -44,100 +38,51 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </button>
         </div>
 
-        {/* Tab selection */}
-        <div className="flex gap-2 p-1 bg-slate-950 rounded-xl mb-6 border border-slate-800">
+        <div className="space-y-4">
+          <p className="text-xs text-slate-300 leading-relaxed">
+            AudioCar Drive accederá exclusivamente a la carpeta <strong className="text-white">mimusica</strong> en tu Google Drive utilizando el scope <code className="text-blue-400">drive.readonly</code>.
+          </p>
+
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-300 space-y-1">
+            <p className="font-semibold">Requisito importante:</p>
+            <p>Asegúrate de tener una carpeta llamada exactamente <strong className="text-white">mimusica</strong> en la raíz de tu Google Drive que contenga tus archivos de audio o subcarpetas.</p>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-blue-400" />
+              <span>Google OAuth Client ID</span>
+            </label>
+            <input
+              type="text"
+              value={clientIdInput}
+              onChange={(e) => setClientIdInput(e.target.value)}
+              placeholder="Ej. 123456789-abc...apps.googleusercontent.com"
+              className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono"
+            />
+            <p className="text-[11px] text-slate-500">
+              También puedes definir la variable de entorno <code className="text-slate-400">VITE_GOOGLE_CLIENT_ID</code> en tu entorno.
+            </p>
+          </div>
+
           <button
-            onClick={() => setActiveTab('demo')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${
-              activeTab === 'demo' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={() => {
+              if (clientIdInput.trim()) {
+                GoogleDriveAuth.setStoredClientId(clientIdInput.trim());
+                onConnectDrive(clientIdInput.trim());
+                onClose();
+              }
+            }}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-colors flex items-center justify-center gap-2 mt-4"
           >
-            Demo Library
-          </button>
-          <button
-            onClick={() => setActiveTab('qr')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${
-              activeTab === 'qr' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Tesla QR Code
-          </button>
-          <button
-            onClick={() => setActiveTab('token')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${
-              activeTab === 'token' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            OAuth Token
+            <ExternalLink className="w-4 h-4" />
+            <span>Conectar con Google Drive</span>
           </button>
         </div>
 
-        {activeTab === 'demo' && (
-          <div className="space-y-4 text-center py-4">
-            <div className="w-16 h-16 bg-blue-600/10 border border-blue-500/20 rounded-2xl flex items-center justify-center mx-auto text-blue-400">
-              <Sparkles className="w-8 h-8" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Instant Demo Library</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                Test AudioCar Drive instantly with high-quality preloaded music streams and offline caching without logging into Google.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                onEnableDemoMode();
-                onClose();
-              }}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-colors"
-            >
-              Launch Demo Experience
-            </button>
-          </div>
-        )}
-
-        {activeTab === 'qr' && (
-          <div className="space-y-4 text-center py-2">
-            <p className="text-xs text-slate-400">
-              Scan this QR code with your phone camera to securely authorize your Tesla screen without typing credentials.
-            </p>
-            <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mx-auto">
-              <QRCodeSVG value={pairingUrl} size={180} level="M" />
-            </div>
-            <p className="text-[11px] font-mono text-slate-500 truncate">Session ID: {sessionId}</p>
-          </div>
-        )}
-
-        {activeTab === 'token' && (
-          <div className="space-y-4 py-2">
-            <p className="text-xs text-slate-400">
-              Paste your Google OAuth Access Token (with <code className="text-blue-400">drive.file</code> scope) to connect your personal Google Drive music folder.
-            </p>
-            <div className="space-y-2">
-              <input
-                type="password"
-                value={inputToken}
-                onChange={(e) => setInputToken(e.target.value)}
-                placeholder="ya29.a0..."
-                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono"
-              />
-            </div>
-            <button
-              onClick={() => {
-                if (inputToken.trim()) {
-                  onLoginWithToken(inputToken.trim());
-                  onClose();
-                }
-              }}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-colors"
-            >
-              Verify & Connect Drive
-            </button>
-          </div>
-        )}
-
         <div className="mt-6 pt-4 border-t border-slate-800 flex items-center gap-2 text-[11px] text-slate-500">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Strict privacy: Only accesses files created or opened by this app (drive.file scope).</span>
+          <span>Seguridad: Autenticación oficial de Google Identity Services. Sin contraseñas almacenadas.</span>
         </div>
       </div>
     </div>

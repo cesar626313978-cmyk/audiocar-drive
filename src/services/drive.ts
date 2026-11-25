@@ -1,164 +1,190 @@
 import { Track, PlaylistFolder } from '../types/audio';
 
-const CLIENT_ID_KEY = 'audiocar_google_client_id';
-const TOKEN_KEY = 'audiocar_google_access_token';
-const MUSIC_FOLDER_ID_KEY = 'audiocar_music_folder_id';
+const TOKEN_KEY = 'audiocar_access_token';
+const EXPIRES_KEY = 'audiocar_expires_at';
+const EMAIL_KEY = 'audiocar_user_email';
+const FOLDER_ID_KEY = 'audiocar_mimusica_folder_id';
+const CLIENT_ID_KEY = 'audiocar_client_id';
 
-// Sample demo tracks for out-of-the-box demo testing
-export const DEMO_TRACKS: Track[] = [
-  {
-    id: 'demo-1',
-    name: 'Midnight Drive (Synthwave Remix)',
-    mimeType: 'audio/mp3',
-    downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf756.mp3?filename=synthwave-80s-110530.mp3',
-    artist: 'Neon Horizon',
-    album: 'Cyber Highway',
-    duration: 184,
-    offlineReady: true
-  },
-  {
-    id: 'demo-2',
-    name: 'Coastal Cruise (Chillout Lo-Fi)',
-    mimeType: 'audio/mp3',
-    downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lofi-study-112191.mp3',
-    artist: 'Pacific Coast',
-    album: 'Sunset Sessions',
-    duration: 152,
-    offlineReady: true
-  },
-  {
-    id: 'demo-3',
-    name: 'Mountain Pass (Ambient Electronic)',
-    mimeType: 'audio/mp3',
-    downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f792cb.mp3?filename=ambient-space-12349.mp3',
-    artist: 'Altitude',
-    album: 'Elevation',
-    duration: 210,
-    offlineReady: false
-  },
-  {
-    id: 'demo-4',
-    name: 'Electric Speed (Synth Rock)',
-    mimeType: 'audio/mp3',
-    downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=energetic-rock-103314.mp3',
-    artist: 'Voltage',
-    album: 'Full Throttle',
-    duration: 165,
-    offlineReady: false
-  }
-];
+export class GoogleDriveAuth {
+  private static tokenClient: any = null;
 
-export const DEMO_PLAYLISTS: PlaylistFolder[] = [
-  {
-    id: 'demo-folder-1',
-    name: 'Mi música (Demo)',
-    tracks: DEMO_TRACKS,
-    subfolders: [
-      {
-        id: 'demo-folder-2',
-        name: 'Roadtrip 2026',
-        tracks: [DEMO_TRACKS[0], DEMO_TRACKS[1]]
-      },
-      {
-        id: 'demo-folder-3',
-        name: 'Night Driving',
-        tracks: [DEMO_TRACKS[2], DEMO_TRACKS[3]]
-      }
-    ]
-  }
-];
-
-export class GoogleDriveService {
   static getStoredToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    const expiresAt = Number(localStorage.getItem(EXPIRES_KEY) || 0);
+    if (!token || Date.now() >= expiresAt) {
+      return null;
+    }
+    return token;
   }
 
-  static setStoredToken(token: string): void {
-    localStorage.setItem(TOKEN_KEY, token);
+  static getStoredEmail(): string | null {
+    return localStorage.getItem(EMAIL_KEY);
   }
 
-  static clearStoredToken(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(MUSIC_FOLDER_ID_KEY);
-  }
-
-  static getStoredClientId(): string | null {
-    return localStorage.getItem(CLIENT_ID_KEY);
+  static getStoredClientId(): string {
+    return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem(CLIENT_ID_KEY) || '';
   }
 
   static setStoredClientId(clientId: string): void {
     localStorage.setItem(CLIENT_ID_KEY, clientId);
   }
 
-  static async findOrCreateMusicFolder(token: string): Promise<string> {
-    const storedFolderId = localStorage.getItem(MUSIC_FOLDER_ID_KEY);
-    if (storedFolderId) return storedFolderId;
+  static clearSession(): void {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(EXPIRES_KEY);
+    localStorage.removeItem(EMAIL_KEY);
+    localStorage.removeItem(FOLDER_ID_KEY);
+  }
 
+  static async loadGISScript(): Promise<void> {
+    if ((window as any).google?.accounts?.oauth2) return;
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = (err) => reject(err);
+      document.head.appendChild(script);
+    });
+  }
+
+  static async initTokenClient(clientId: string, callback: (resp: any) => void): Promise<any> {
+    await this.loadGISScript();
+    const google = (window as any).google;
+    if (!google || !google.accounts) throw new Error('Google Identity Services failed to load');
+
+    this.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: (resp: any) => {
+        if (resp && resp.access_token) {
+          const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600;
+          const expiresAt = Date.now() + expiresIn * 1000 - 300000; // 5 min buffer for silent renewal
+          localStorage.setItem(TOKEN_KEY, resp.access_token);
+          localStorage.setItem(EXPIRES_KEY, expiresAt.toString());
+          
+          // Fetch user info
+          this.fetchUserInfo(resp.access_token);
+        }
+        callback(resp);
+      }
+    });
+    return this.tokenClient;
+  }
+
+  static async fetchUserInfo(token: string): Promise<string | null> {
     try {
-      // Search for folder named "Mi música"
-      const query = encodeURIComponent("name = 'Mi música' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Failed to search Drive folders');
+      if (!res.ok) return null;
       const data = await res.json();
-      
-      if (data.files && data.files.length > 0) {
-        const folderId = data.files[0].id;
-        localStorage.setItem(MUSIC_FOLDER_ID_KEY, folderId);
-        return folderId;
+      if (data.email) {
+        localStorage.setItem(EMAIL_KEY, data.email);
+        return data.email;
       }
+    } catch (e) {
+      console.warn('Failed to fetch userinfo:', e);
+    }
+    return null;
+  }
 
-      // Create "Mi música" folder if not found
-      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: 'Mi música',
-          mimeType: 'application/vnd.google-apps.folder'
-        })
+  static async silentRefresh(): Promise<string | null> {
+    const clientId = this.getStoredClientId();
+    const email = this.getStoredEmail();
+    if (!clientId) return null;
+
+    try {
+      await this.loadGISScript();
+      const google = (window as any).google;
+      return new Promise((resolve) => {
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
+          callback: (resp: any) => {
+            if (resp && resp.access_token) {
+              const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600;
+              const expiresAt = Date.now() + expiresIn * 1000 - 300000;
+              localStorage.setItem(TOKEN_KEY, resp.access_token);
+              localStorage.setItem(EXPIRES_KEY, expiresAt.toString());
+              resolve(resp.access_token);
+            } else {
+              resolve(null);
+            }
+          }
+        });
+        client.requestAccessToken({ prompt: '', hint: email || undefined });
       });
-      if (!createRes.ok) throw new Error('Failed to create "Mi música" folder');
-      const folderData = await createRes.json();
-      localStorage.setItem(MUSIC_FOLDER_ID_KEY, folderData.id);
-      return folderData.id;
-    } catch (err) {
-      console.warn('Google Drive folder operation error:', err);
-      throw err;
+    } catch {
+      return null;
     }
   }
 
-  static async fetchLibrary(token: string, folderId: string): Promise<PlaylistFolder> {
+  static revokeToken(): void {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const google = (window as any).google;
+    if (token && google?.accounts?.oauth2) {
+      google.accounts.oauth2.revoke(token, () => {
+        console.log('Token revoked');
+      });
+    }
+    this.clearSession();
+  }
+}
+
+export class GoogleDriveService {
+  static async findMimusicaFolder(token: string): Promise<string | null> {
+    const stored = localStorage.getItem(FOLDER_ID_KEY);
+    if (stored) return stored;
+
     try {
-      // Fetch files inside folder (audio files and subfolders)
-      const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,modifiedTime,webContentLink)`, {
+      const query = encodeURIComponent("name = 'mimusica' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Failed to list files in Google Drive');
+      if (!res.ok) throw new Error('Drive API error');
       const data = await res.json();
-      
+      if (data.files && data.files.length > 0) {
+        const folderId = data.files[0].id;
+        localStorage.setItem(FOLDER_ID_KEY, folderId);
+        return folderId;
+      }
+    } catch (e) {
+      console.warn('Error searching for mimusica folder:', e);
+    }
+    return null;
+  }
+
+  static async fetchMimusicaLibrary(token: string, folderId: string): Promise<PlaylistFolder> {
+    try {
+      // Fetch subfolders and audio files inside mimusica
+      const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,modifiedTime)`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to list files');
+      const data = await res.json();
+
       const tracks: Track[] = [];
       const subfolderPromises: Promise<PlaylistFolder>[] = [];
 
       for (const file of (data.files || [])) {
         if (file.mimeType === 'application/vnd.google-apps.folder') {
-          subfolderPromises.push(this.fetchLibrary(token, file.id));
+          subfolderPromises.push(this.fetchSubfolderLibrary(token, file.id, file.name));
         } else if (
-          file.mimeType?.startsWith('audio/') ||
+          file.mimeType?.includes('audio') ||
           file.name.match(/\.(mp3|flac|wav|m4a|ogg)$/i)
         ) {
+          const cleanName = file.name.replace(/\.[^/.]+$/, '');
           tracks.push({
             id: file.id,
-            name: file.name.replace(/\.[^/.]+$/, ''),
-            mimeType: file.mimeType || 'audio/mp3',
+            name: cleanName,
+            mimeType: file.mimeType || 'audio/mpeg',
             size: file.size ? Number(file.size) : undefined,
             modifiedTime: file.modifiedTime,
             downloadUrl: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
-            webContentLink: file.webContentLink,
             parentId: folderId
           });
         }
@@ -168,40 +194,80 @@ export class GoogleDriveService {
 
       return {
         id: folderId,
-        name: 'Mi música',
+        name: 'mimusica',
         tracks,
         subfolders
       };
-    } catch (err) {
-      console.warn('Failed to fetch Google Drive library, falling back to demo library:', err);
-      return DEMO_PLAYLISTS[0];
+    } catch (e) {
+      console.error('Failed to fetch mimusica library:', e);
+      throw e;
+    }
+  }
+
+  private static async fetchSubfolderLibrary(token: string, folderId: string, folderName: string): Promise<PlaylistFolder> {
+    try {
+      const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,modifiedTime)`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return { id: folderId, name: folderName, tracks: [] };
+      const data = await res.json();
+
+      const tracks: Track[] = [];
+      for (const file of (data.files || [])) {
+        if (
+          file.mimeType?.includes('audio') ||
+          file.name.match(/\.(mp3|flac|wav|m4a|ogg)$/i)
+        ) {
+          const cleanName = file.name.replace(/\.[^/.]+$/, '');
+          tracks.push({
+            id: file.id,
+            name: cleanName,
+            mimeType: file.mimeType || 'audio/mpeg',
+            size: file.size ? Number(file.size) : undefined,
+            modifiedTime: file.modifiedTime,
+            downloadUrl: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+            parentId: folderId
+          });
+        }
+      }
+
+      return {
+        id: folderId,
+        name: folderName,
+        tracks
+      };
+    } catch {
+      return { id: folderId, name: folderName, tracks: [] };
     }
   }
 
   static async fetchAudioBlobWithRetry(track: Track, token: string | null): Promise<Blob> {
-    const url = track.downloadUrl || (track.id.startsWith('demo-') ? track.downloadUrl : `https://www.googleapis.com/drive/v3/files/${track.id}?alt=media`);
-    if (!url) throw new Error('No download URL available for track');
+    const url = track.downloadUrl;
+    if (!url) throw new Error('No download URL available');
 
     let retries = 3;
     let delay = 1000;
 
     while (retries > 0) {
       try {
-        const headers: HeadersInit = {};
-        if (token && !track.id.startsWith('demo-')) {
-          headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.status === 401) {
+          // Token expired or invalid
+          throw new Error('UNAUTHORIZED');
         }
-        const res = await fetch(url, { headers });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const blob = await res.blob();
-        return blob;
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        return await res.blob();
       } catch (err) {
+        if ((err as Error).message === 'UNAUTHORIZED') throw err;
         retries--;
         if (retries === 0) throw err;
         await new Promise((r) => setTimeout(r, delay));
-        delay *= 2; // exponential backoff
+        delay *= 2;
       }
     }
-    throw new Error('Failed to fetch audio blob after retries');
+    throw new Error('Failed to fetch audio blob');
   }
 }
