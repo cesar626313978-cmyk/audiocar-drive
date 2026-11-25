@@ -147,31 +147,36 @@ export class GoogleDriveAuth {
 }
 
 export class GoogleDriveService {
-  static async findMimusicaFolder(token: string): Promise<string | null> {
-    const stored = localStorage.getItem(FOLDER_ID_KEY);
-    if (stored) return stored;
+  static async findMimusicaFolder(token: string): Promise<string> {
+    const q = encodeURIComponent("name = 'mimusica' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,parents)&spaces=drive`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-    try {
-      const q = encodeURIComponent("mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,parents)&includeItemsFromAllDrives=true&supportsAllDrives=true&pageSize=200`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('Drive API error');
-      const data = await res.json();
-      
-      const files = data.files || [];
-      // Find folder whose name in lower case and without spaces is exactly 'mimusica'
-      const match = files.find((f: any) => f.name.toLowerCase().replace(/\s+/g, '') === 'mimusica');
-      
-      if (match) {
-        localStorage.setItem(FOLDER_ID_KEY, match.id);
-        return match.id;
+    if (!res.ok) {
+      let errorMsg = `Error ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error && errJson.error.message) {
+          errorMsg = `Error ${res.status}: ${errJson.error.message}`;
+        }
+      } catch {
+        // fallback
       }
-    } catch (e) {
-      console.warn('Error searching for mimusica folder:', e);
+      throw new Error(errorMsg);
     }
-    return null;
+
+    const data = await res.json();
+    const files = data.files || [];
+    const match = files.find((f: any) => f.name.toLowerCase().replace(/\s+/g, '') === 'mimusica');
+
+    if (!match) {
+      throw new Error('FOLDER_NOT_FOUND');
+    }
+
+    localStorage.setItem(FOLDER_ID_KEY, match.id);
+    return match.id;
   }
 
   static async fetchMimusicaLibrary(token: string, folderId: string): Promise<PlaylistFolder> {

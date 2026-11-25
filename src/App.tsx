@@ -9,7 +9,7 @@ import { PlayerPanel } from './components/PlayerPanel';
 import { DrivingHUD } from './components/DrivingHUD';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -24,6 +24,8 @@ export default function App() {
     tracks: []
   });
   const [folderNotFound, setFolderNotFound] = useState<boolean>(false);
+  const [folderErrorMsg, setFolderErrorMsg] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
   const [cacheSize, setCacheSize] = useState<string>('0.0');
 
   const [settings, setSettings] = useState<AudioSettings>({
@@ -95,13 +97,10 @@ export default function App() {
   };
 
   const initMimusicaLibrary = async (authToken: string) => {
+    setFolderNotFound(false);
+    setFolderErrorMsg(null);
     try {
       const folderId = await GoogleDriveService.findMimusicaFolder(authToken);
-      if (!folderId) {
-        setFolderNotFound(true);
-        return;
-      }
-      setFolderNotFound(false);
       const fetchedLib = await GoogleDriveService.fetchMimusicaLibrary(authToken, folderId);
       setLibrary(fetchedLib);
       
@@ -122,12 +121,38 @@ export default function App() {
         if (freshToken) {
           setToken(freshToken);
           initMimusicaLibrary(freshToken);
+          return;
         } else {
           setIsAuthenticated(false);
           setIsLoginOpen(true);
+          return;
         }
       }
+
+      setFolderNotFound(true);
+      if (e.message === 'FOLDER_NOT_FOUND') {
+        const currentEmail = userEmail || GoogleDriveAuth.getStoredEmail() || 'cuenta actual';
+        setFolderErrorMsg(`Conectado como ${currentEmail} — No se encontró la carpeta "mimusica" en esta cuenta.`);
+      } else {
+        setFolderErrorMsg(e.message || 'Error al conectar con Google Drive API');
+      }
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    let activeToken = GoogleDriveAuth.getStoredToken();
+    if (!activeToken) {
+      activeToken = await GoogleDriveAuth.silentRefresh();
+    }
+    if (activeToken) {
+      setToken(activeToken);
+      setIsAuthenticated(true);
+      await initMimusicaLibrary(activeToken);
+    } else {
+      setIsLoginOpen(true);
+    }
+    setIsRetrying(false);
   };
 
   const handleConnectDrive = async (clientId: string, promptValue?: string) => {
@@ -310,20 +335,22 @@ export default function App() {
         cacheSize={cacheSize}
       />
 
-      {/* Folder Not Found Warning Banner */}
+      {/* Folder Not Found / API Error Warning Banner */}
       {isAuthenticated && folderNotFound && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between text-amber-300 text-xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
-              No se encontró la carpeta <strong className="font-semibold text-white">mimusica</strong> en la cuenta <strong className="text-white underline">{userEmail || 'actual'}</strong>. Por favor, asegúrate de haberla creado en la raíz de tu Google Drive.
+              {folderErrorMsg || `No se encontró la carpeta "mimusica" en la cuenta ${userEmail || 'actual'}.`}
             </span>
           </div>
           <button
-            onClick={() => token && initMimusicaLibrary(token)}
-            className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg font-medium transition-colors"
+            onClick={handleRetry}
+            disabled={isRetrying}
+            className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            Reintentar
+            {isRetrying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            <span>{isRetrying ? 'Buscando...' : 'Reintentar'}</span>
           </button>
         </div>
       )}
