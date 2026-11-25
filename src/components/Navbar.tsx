@@ -1,14 +1,16 @@
 import React from 'react';
-import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Wifi, Home } from 'lucide-react';
+import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Wifi, Home, UserCheck, RefreshCw } from 'lucide-react';
 
 interface NavbarProps {
   isAuthenticated: boolean;
   folderName: string;
-  isDemoMode: boolean;
   theme: 'dark' | 'light';
+  userEmail: string | null;
+  userPicture: string | null;
   onToggleTheme: () => void;
   onOpenSettings: () => void;
   onOpenLogin: () => void;
+  onChangeAccount: () => void;
   onLogout: () => void;
   cacheSize: string;
 }
@@ -16,11 +18,13 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   isAuthenticated,
   folderName,
-  isDemoMode,
   theme,
+  userEmail,
+  userPicture,
   onToggleTheme,
   onOpenSettings,
   onOpenLogin,
+  onChangeAccount,
   onLogout,
   cacheSize
 }) => {
@@ -35,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             AudioCar Drive
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              {isDemoMode ? 'Demo Library' : 'Tesla OS'}
+              Tesla OS
             </span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
@@ -46,10 +50,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Zone 2: Status & Cache */}
-      <div className="hidden lg:flex items-center gap-6 text-xs text-slate-600 dark:text-slate-300">
+      <div className="hidden lg:flex items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Anti-Tunnel Cache: <strong className="font-semibold">{cacheSize} MB</strong></span>
+          <span>Cache: <strong className="font-semibold">{cacheSize} MB</strong></span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
@@ -84,13 +88,31 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {isAuthenticated ? (
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors border border-rose-500/20"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Desconectar</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Green status pill with connected email */}
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              {userPicture && <img src={userPicture} alt="Avatar" className="w-4 h-4 rounded-full" />}
+              <span className="truncate max-w-[160px]">Conectado: {userEmail || 'Google Drive'}</span>
+            </div>
+
+            <button
+              onClick={onChangeAccount}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors border border-slate-700"
+              title="Cambiar de cuenta de Google"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cambiar cuenta</span>
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors border border-rose-500/20"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Desconectar</span>
+            </button>
+          </div>
         ) : (
           <button
             onClick={onOpenLogin}

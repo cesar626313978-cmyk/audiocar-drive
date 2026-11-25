@@ -9,12 +9,14 @@ import { PlayerPanel } from './components/PlayerPanel';
 import { DrivingHUD } from './components/DrivingHUD';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { X, FolderSearch, AlertCircle } from 'lucide-react';
+import { X, AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userPicture, setUserPicture] = useState<string | null>(null);
   const [folderName, setFolderName] = useState<string>('mimusica (Drive)');
   const [library, setLibrary] = useState<PlaylistFolder>({
     id: 'root-empty',
@@ -75,16 +77,16 @@ export default function App() {
   const checkAndRestoreSession = async () => {
     let activeToken = GoogleDriveAuth.getStoredToken();
     if (!activeToken) {
-      // Try silent refresh
       activeToken = await GoogleDriveAuth.silentRefresh();
     }
 
     if (activeToken) {
       setToken(activeToken);
       setIsAuthenticated(true);
+      setUserEmail(GoogleDriveAuth.getStoredEmail());
+      setUserPicture(GoogleDriveAuth.getStoredPicture());
       initMimusicaLibrary(activeToken);
     } else {
-      // If no clientId configured, prompt login modal
       const clientId = GoogleDriveAuth.getStoredClientId();
       if (!clientId) {
         setIsLoginOpen(true);
@@ -116,7 +118,6 @@ export default function App() {
     } catch (e: any) {
       console.error('Failed to load Google Drive library:', e);
       if (e.message === 'UNAUTHORIZED') {
-        // Try silent refresh once
         const freshToken = await GoogleDriveAuth.silentRefresh();
         if (freshToken) {
           setToken(freshToken);
@@ -129,18 +130,31 @@ export default function App() {
     }
   };
 
-  const handleConnectDrive = async (clientId: string) => {
+  const handleConnectDrive = async (clientId: string, promptValue?: string) => {
     try {
-      const tokenClient = await GoogleDriveAuth.initTokenClient(clientId, (resp) => {
+      const tokenClient = await GoogleDriveAuth.initTokenClient(clientId, async (resp) => {
         if (resp && resp.access_token) {
           setToken(resp.access_token);
           setIsAuthenticated(true);
+          const email = GoogleDriveAuth.getStoredEmail();
+          const picture = GoogleDriveAuth.getStoredPicture();
+          setUserEmail(email);
+          setUserPicture(picture);
           initMimusicaLibrary(resp.access_token);
         }
-      });
-      tokenClient.requestAccessToken();
+      }, promptValue);
+      tokenClient.requestAccessToken({ prompt: promptValue || '' });
     } catch (e) {
       console.error('Failed to initialize Google token client:', e);
+    }
+  };
+
+  const handleChangeAccount = () => {
+    const clientId = GoogleDriveAuth.getStoredClientId();
+    if (clientId) {
+      handleConnectDrive(clientId, 'select_account');
+    } else {
+      setIsLoginOpen(true);
     }
   };
 
@@ -270,8 +284,9 @@ export default function App() {
       <Navbar
         isAuthenticated={isAuthenticated}
         folderName={folderName}
-        isDemoMode={false}
         theme={theme}
+        userEmail={userEmail}
+        userPicture={userPicture}
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLogin={() => {
@@ -282,10 +297,13 @@ export default function App() {
             setIsLoginOpen(true);
           }
         }}
+        onChangeAccount={handleChangeAccount}
         onLogout={() => {
           GoogleDriveAuth.revokeToken();
           setToken(null);
           setIsAuthenticated(false);
+          setUserEmail(null);
+          setUserPicture(null);
           setLibrary({ id: 'empty', name: 'mimusica', tracks: [] });
           setPlaybackState(prev => ({ ...prev, queue: [], currentTrack: null, isPlaying: false }));
         }}
@@ -297,7 +315,9 @@ export default function App() {
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between text-amber-300 text-xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>No se encontró la carpeta <strong className="font-semibold text-white">mimusica</strong> en la raíz de tu Google Drive. Por favor, créala e introduce tus canciones.</span>
+            <span>
+              No se encontró la carpeta <strong className="font-semibold text-white">mimusica</strong> en la cuenta <strong className="text-white underline">{userEmail || 'actual'}</strong>. Por favor, asegúrate de haberla creado en la raíz de tu Google Drive.
+            </span>
           </div>
           <button
             onClick={() => token && initMimusicaLibrary(token)}
