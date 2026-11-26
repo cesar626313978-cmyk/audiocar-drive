@@ -7,6 +7,7 @@ export class AudioEngine {
   private audioCtx: AudioContext | null = null;
   private gainNode: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
+  private analyser: AnalyserNode | null = null;
   private bassFilter: BiquadFilterNode | null = null;
   private midFilter: BiquadFilterNode | null = null;
   private trebleFilter: BiquadFilterNode | null = null;
@@ -34,6 +35,31 @@ export class AudioEngine {
     this.audio.preload = 'auto';
     this.audio.dataset.engine = 'audiocar-drive-primary';
     this.setupListeners();
+  }
+
+  /**
+   * Safely retrieves real-time frequency data from the Web Audio AnalyserNode.
+   * Returns true if real non-zero frequency energy is present, or false if unavailable/silent/CORS-restricted.
+   */
+  public getFrequencyData(targetBuffer: Uint8Array): boolean {
+    if (!this.analyser || !this.audioCtx || this.audioCtx.state !== 'running' || this.audio.paused) {
+      return false;
+    }
+    try {
+      this.analyser.getByteFrequencyData(targetBuffer as Uint8Array<ArrayBuffer>);
+      let energySum = 0;
+      for (let i = 0; i < targetBuffer.length; i++) {
+        energySum += targetBuffer[i];
+        if (energySum > 15) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  public isAudioPlaying(): boolean {
+    return !this.audio.paused && this.audio.readyState >= 2;
   }
 
   /**
@@ -146,13 +172,21 @@ export class AudioEngine {
       this.trebleFilter.type = 'highshelf';
       this.trebleFilter.frequency.value = 4000;
 
+      // Non-intrusive AnalyserNode branch for real-time 56-bar spectrum visualization
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.82;
+
       source
         .connect(this.gainNode)
         .connect(this.bassFilter)
         .connect(this.midFilter)
         .connect(this.trebleFilter)
-        .connect(this.compressor)
-        .connect(this.audioCtx.destination);
+        .connect(this.compressor);
+
+      // Connect main output directly to destination AND tap into analyser in parallel
+      this.compressor.connect(this.audioCtx.destination);
+      this.compressor.connect(this.analyser);
 
       this.startAudioFocusKeepAlive();
     } catch (e) {

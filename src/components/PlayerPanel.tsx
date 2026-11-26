@@ -1,6 +1,7 @@
 import React from 'react';
 import { Track } from '../types/audio';
 import { ShieldCheck, Radio, Disc, Folder } from 'lucide-react';
+import { AudioVisualizer } from './AudioVisualizer';
 
 interface PlayerPanelProps {
   currentTrack: Track | null;
@@ -60,10 +61,10 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
         </div>
       </div>
 
-      {/* Center Stage: Large Artwork & Soundwave Visualizer ONLY (zero duplicate controls or progress bar) */}
+      {/* Center Stage: Large Artwork & 56-Bar High-Definition Canvas AudioVisualizer */}
       <div className="relative my-auto flex flex-col items-center justify-center w-full">
         <div
-          className={`relative w-56 h-56 sm:w-64 sm:h-64 xl:w-72 xl:h-72 [@media(max-height:750px)]:w-[176px] [@media(max-height:750px)]:h-[176px] rounded-3xl overflow-hidden shadow-2xl border border-slate-700/60 bg-slate-950 flex items-center justify-center group ${
+          className={`relative w-56 h-56 sm:w-64 sm:h-64 xl:w-72 xl:h-72 [@media(max-height:750px)]:w-[172px] [@media(max-height:750px)]:h-[172px] rounded-3xl overflow-hidden shadow-2xl border border-slate-700/60 bg-slate-950 flex items-center justify-center group ${
             isPlaying ? 'animate-float' : ''
           }`}
         >
@@ -94,21 +95,8 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
           </div>
         </div>
 
-        {/* Soundwave Visualizer bars */}
-        <div className="flex items-center justify-center gap-1.5 h-10 [@media(max-height:750px)]:h-6 mt-6 [@media(max-height:750px)]:mt-3">
-          {[...Array(28)].map((_, i) => (
-            <span
-              key={i}
-              className={`w-1.5 bg-blue-500 rounded-full transition-all duration-150 ${
-                isPlaying ? 'animate-pulse' : 'h-1.5 opacity-35'
-              }`}
-              style={{
-                height: isPlaying ? `${Math.max(8, Math.abs(Math.sin(i * 0.6 + Date.now() / 180)) * 32)}px` : '5px',
-                animationDelay: `${i * 45}ms`
-              }}
-            ></span>
-          ))}
-        </div>
+        {/* High-Definition 56-Bar Symmetric Canvas Visualizer */}
+        <AudioVisualizer isPlaying={isPlaying} />
       </div>
 
       {/* Subtle bottom status line inside the stage card */}
