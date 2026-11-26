@@ -3,36 +3,123 @@ import { AudioCacheDB } from './db';
 import { GoogleDriveService } from './drive';
 
 export class AudioEngine {
-  private audioA: HTMLAudioElement;
-  private audioB: HTMLAudioElement;
-  private activePlayer: 'A' | 'B' = 'A';
-  
+  private audio: HTMLAudioElement;
   private audioCtx: AudioContext | null = null;
-  private gainA: GainNode | null = null;
-  private gainB: GainNode | null = null;
+  private gainNode: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private bassFilter: BiquadFilterNode | null = null;
   private midFilter: BiquadFilterNode | null = null;
   private trebleFilter: BiquadFilterNode | null = null;
 
-  private currentBlobUrlA: string | null = null;
-  private currentBlobUrlB: string | null = null;
+  // Sub-audible keep-alive nodes to prevent Tesla OS / Automotive CarAudioService
+  // from detecting an idle hardware sink during track transitions and jumping to FM Radio
+  private keepAliveOsc: OscillatorNode | null = null;
+  private keepAliveGain: GainNode | null = null;
+  private wakeLock: any = null;
+  private isTransitioningTrack: boolean = false;
+
+  private currentBlobUrl: string | null = null;
 
   private onTimeUpdateCallback: ((time: number, duration: number) => void) | null = null;
   private onTrackEndCallback: (() => void) | null = null;
   private onStateChangeCallback: ((isPlaying: boolean) => void) | null = null;
+  private onPrevTrackCallback: (() => void) | null = null;
+  private onNextTrackCallback: (() => void) | null = null;
 
-  private isCrossfading = false;
   private positionStateInterval: any = null;
 
   constructor() {
-    this.audioA = new Audio();
-    this.audioB = new Audio();
-    this.audioA.crossOrigin = 'anonymous';
-    this.audioB.crossOrigin = 'anonymous';
+    this.audio = new Audio();
+    this.audio.crossOrigin = 'anonymous';
+    this.audio.preload = 'auto';
+    this.audio.dataset.engine = 'audiocar-drive-primary';
+    this.setupListeners();
+  }
 
-    this.setupListeners(this.audioA, 'A');
-    this.setupListeners(this.audioB, 'B');
+  /**
+   * Stops and cleans up any stray <audio> elements or previous radio streams in the DOM/window
+   * so that only our single AudioEngine instance ever plays.
+   */
+  public stopAllOtherAudioSources() {
+    try {
+      const allAudios = document.querySelectorAll('audio');
+      allAudios.forEach((el) => {
+        if (el !== this.audio && el.dataset.engine !== 'audiocar-drive-primary') {
+          el.pause();
+          el.removeAttribute('src');
+          el.load();
+        }
+      });
+
+      const win = window as any;
+      if (win.__audiocarRadioAudio && win.__audiocarRadioAudio !== this.audio) {
+        try {
+          win.__audiocarRadioAudio.pause();
+          win.__audiocarRadioAudio.removeAttribute('src');
+          win.__audiocarRadioAudio.load();
+        } catch {
+          // ignore
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning external audio elements:', e);
+    }
+  }
+
+  /**
+   * Acquires Screen/System WakeLock so the automotive browser never throttles background timers or audio buffers
+   */
+  private async acquireWakeLock() {
+    if ('wakeLock' in navigator && !this.wakeLock) {
+      try {
+        this.wakeLock = await (navigator as any).wakeLock.request('screen');
+        this.wakeLock.addEventListener('release', () => {
+          this.wakeLock = null;
+        });
+      } catch {
+        // WakeLock not permitted or unsupported
+      }
+    }
+  }
+
+  /**
+   * Starts a continuous sub-audible carrier (-90dB) on the WebAudio hardware sink
+   * so Tesla OS / Automotive Audio Focus never drops to 'none' between tracks.
+   */
+  private startAudioFocusKeepAlive() {
+    if (!this.audioCtx || this.keepAliveOsc) return;
+    try {
+      this.keepAliveOsc = this.audioCtx.createOscillator();
+      this.keepAliveGain = this.audioCtx.createGain();
+      this.keepAliveOsc.type = 'sine';
+      this.keepAliveOsc.frequency.value = 20; // 20Hz sub-audible
+      this.keepAliveGain.gain.value = 0.00001; // -100dB imperceptible keep-alive
+      this.keepAliveOsc.connect(this.keepAliveGain);
+      this.keepAliveGain.connect(this.audioCtx.destination);
+      this.keepAliveOsc.start();
+    } catch (e) {
+      console.warn('Keep-alive oscillator failed:', e);
+    }
+  }
+
+  private stopAudioFocusKeepAlive() {
+    if (this.keepAliveOsc) {
+      try {
+        this.keepAliveOsc.stop();
+        this.keepAliveOsc.disconnect();
+      } catch {
+        // ignore
+      }
+      this.keepAliveOsc = null;
+    }
+    if (this.keepAliveGain) {
+      try {
+        this.keepAliveGain.disconnect();
+      } catch {
+        // ignore
+      }
+      this.keepAliveGain = null;
+    }
   }
 
   private initWebAudio() {
@@ -41,11 +128,8 @@ export class AudioEngine {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       this.audioCtx = new AudioContextClass();
 
-      const sourceA = this.audioCtx.createMediaElementSource(this.audioA);
-      const sourceB = this.audioCtx.createMediaElementSource(this.audioB);
-
-      this.gainA = this.audioCtx.createGain();
-      this.gainB = this.audioCtx.createGain();
+      const source = this.audioCtx.createMediaElementSource(this.audio);
+      this.gainNode = this.audioCtx.createGain();
       this.compressor = this.audioCtx.createDynamicsCompressor();
 
       // Equalizer filters
@@ -62,52 +146,64 @@ export class AudioEngine {
       this.trebleFilter.type = 'highshelf';
       this.trebleFilter.frequency.value = 4000;
 
-      // Routing: sourceA/B -> gainA/B -> bass -> mid -> treble -> compressor -> destination
-      sourceA.connect(this.gainA);
-      sourceB.connect(this.gainB);
-
-      // Merge gain outputs to filter chain
-      const merger = this.audioCtx.createGain();
-      this.gainA.connect(merger);
-      this.gainB.connect(merger);
-
-      merger
+      source
+        .connect(this.gainNode)
         .connect(this.bassFilter)
         .connect(this.midFilter)
         .connect(this.trebleFilter)
         .connect(this.compressor)
         .connect(this.audioCtx.destination);
+
+      this.startAudioFocusKeepAlive();
     } catch (e) {
       console.warn('Web Audio API initialization deferred or failed:', e);
     }
   }
 
-  private setupListeners(audio: HTMLAudioElement, playerKey: 'A' | 'B') {
-    audio.addEventListener('timeupdate', () => {
-      if (this.activePlayer === playerKey) {
-        if (this.onTimeUpdateCallback) {
-          this.onTimeUpdateCallback(audio.currentTime, audio.duration || 0);
-        }
+  private setupListeners() {
+    this.audio.addEventListener('timeupdate', () => {
+      if (this.onTimeUpdateCallback) {
+        this.onTimeUpdateCallback(this.audio.currentTime, this.audio.duration || 0);
       }
     });
 
-    audio.addEventListener('ended', () => {
-      if (this.activePlayer === playerKey && !this.isCrossfading) {
-        if (this.onTrackEndCallback) {
-          this.onTrackEndCallback();
-        }
+    this.audio.addEventListener('ended', () => {
+      // Immediately keep MediaSession marked as 'playing' during track transition
+      // so the vehicle OS does not reclaim audio focus for FM/AM radio
+      this.isTransitioningTrack = true;
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+      if (this.onTrackEndCallback) {
+        this.onTrackEndCallback();
       }
     });
 
-    audio.addEventListener('play', () => {
-      if (this.activePlayer === playerKey && this.onStateChangeCallback) {
+    this.audio.addEventListener('play', () => {
+      this.isTransitioningTrack = false;
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+      if (this.onStateChangeCallback) {
         this.onStateChangeCallback(true);
       }
     });
 
-    audio.addEventListener('pause', () => {
-      if (this.activePlayer === playerKey && this.onStateChangeCallback) {
+    this.audio.addEventListener('pause', () => {
+      // Do not broadcast 'paused' to OS if we are simply swapping the blob URL for the next track
+      if (this.isTransitioningTrack) return;
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+      if (this.onStateChangeCallback) {
         this.onStateChangeCallback(false);
+      }
+    });
+
+    this.audio.addEventListener('stalled', () => {
+      // Attempt automatic recovery if audio buffer stalls mid-track
+      if (!this.audio.paused && this.audio.src) {
+        this.audio.play().catch(() => {});
       }
     });
   }
@@ -115,17 +211,65 @@ export class AudioEngine {
   public setCallbacks(
     onTimeUpdate: (time: number, duration: number) => void,
     onTrackEnd: () => void,
-    onStateChange: (isPlaying: boolean) => void
+    onStateChange: (isPlaying: boolean) => void,
+    onPrevTrack?: () => void,
+    onNextTrack?: () => void
   ) {
     this.onTimeUpdateCallback = onTimeUpdate;
     this.onTrackEndCallback = onTrackEnd;
     this.onStateChangeCallback = onStateChange;
+    if (onPrevTrack) this.onPrevTrackCallback = onPrevTrack;
+    if (onNextTrack) this.onNextTrackCallback = onNextTrack;
+    this.registerExclusiveMediaSessionHandlers();
+  }
+
+  public registerExclusiveMediaSessionHandlers() {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+      const actions: MediaSessionAction[] = ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'stop'];
+      actions.forEach((action) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {
+          // ignore unsupported action
+        }
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        this.stopAllOtherAudioSources();
+        this.startAudioFocusKeepAlive();
+        this.audio.play().catch(() => {});
+      });
+
+      navigator.mediaSession.setActionHandler('pause', () => {
+        this.isTransitioningTrack = false;
+        this.audio.pause();
+      });
+
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        this.isTransitioningTrack = true;
+        if (this.onPrevTrackCallback) this.onPrevTrackCallback();
+      });
+
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        this.isTransitioningTrack = true;
+        if (this.onNextTrackCallback) this.onNextTrackCallback();
+      });
+
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          this.seek(details.seekTime);
+        }
+      });
+    } catch (e) {
+      console.warn('MediaSession handler registration error:', e);
+    }
   }
 
   public updateSettings(settings: AudioSettings) {
     if (!this.audioCtx) return;
 
-    // AGC compressor threshold & ratio
     if (this.compressor) {
       if (settings.agcEnabled) {
         this.compressor.threshold.setValueAtTime(-24, this.audioCtx.currentTime);
@@ -136,124 +280,116 @@ export class AudioEngine {
       }
     }
 
-    // EQ bands
     if (this.bassFilter) this.bassFilter.gain.value = settings.eqBands.bass;
     if (this.midFilter) this.midFilter.gain.value = settings.eqBands.mid;
     if (this.trebleFilter) this.trebleFilter.gain.value = settings.eqBands.treble;
   }
 
   private async getTrackBlobUrl(track: Track, token: string | null): Promise<string> {
-    // 1. Check IndexedDB cache
     let blob = await AudioCacheDB.getBlob(track.id);
     if (!blob) {
-      // 2. Fetch from Drive / CDN with retry
-      try {
-        blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token);
-        await AudioCacheDB.saveBlob(track.id, blob);
-      } catch (err) {
-        console.warn('Failed to fetch blob for track:', track.name, err);
-        throw err;
-      }
+      blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token);
+      await AudioCacheDB.saveBlob(track.id, blob);
     }
-    const url = URL.createObjectURL(blob);
-    return url;
+    return URL.createObjectURL(blob);
   }
 
   public async playTrack(track: Track, token: string | null, settings: AudioSettings): Promise<void> {
+    this.isTransitioningTrack = true;
+    this.stopAllOtherAudioSources();
+    this.acquireWakeLock();
+
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
       await this.audioCtx.resume();
     }
+    this.startAudioFocusKeepAlive();
 
-    const nextPlayer: 'A' | 'B' = this.activePlayer === 'A' ? 'B' : 'A';
-    const targetAudio = nextPlayer === 'A' ? this.audioA : this.audioB;
-    const currentAudio = this.activePlayer === 'A' ? this.audioA : this.audioB;
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+    }
+    this.updateMediaSessionMetadata(track);
 
     try {
+      // Fetch/resolve the next track's Blob URL BEFORE pausing or swapping src
+      // so there is zero dead air gap that could trigger vehicle FM radio fallback
       const blobUrl = await this.getTrackBlobUrl(track, token);
 
-      if (nextPlayer === 'A') {
-        if (this.currentBlobUrlA) URL.revokeObjectURL(this.currentBlobUrlA);
-        this.currentBlobUrlA = blobUrl;
-      } else {
-        if (this.currentBlobUrlB) URL.revokeObjectURL(this.currentBlobUrlB);
-        this.currentBlobUrlB = blobUrl;
-      }
+      const previousBlobUrl = this.currentBlobUrl;
+      this.currentBlobUrl = blobUrl;
 
-      targetAudio.src = blobUrl;
-      targetAudio.currentTime = 0;
-      await targetAudio.load();
+      this.audio.src = blobUrl;
+      this.audio.currentTime = 0;
 
-      // Crossfade logic
-      const crossfadeMs = settings.crossfadeSeconds * 1000;
-      if (crossfadeMs > 0 && !currentAudio.paused && currentAudio.currentTime > 0) {
-        this.isCrossfading = true;
-        const targetGain = nextPlayer === 'A' ? this.gainA : this.gainB;
-        const currentGain = this.activePlayer === 'A' ? this.gainA : this.gainB;
-
-        if (targetGain && currentGain && this.audioCtx) {
+      if (this.gainNode && this.audioCtx) {
+        if (settings.crossfadeSeconds > 0) {
           const now = this.audioCtx.currentTime;
-          targetGain.gain.setValueAtTime(0, now);
-          targetGain.gain.linearRampToValueAtTime(1, now + settings.crossfadeSeconds);
-
-          currentGain.gain.setValueAtTime(1, now);
-          currentGain.gain.linearRampToValueAtTime(0, now + settings.crossfadeSeconds);
+          this.gainNode.gain.setValueAtTime(0.15, now);
+          this.gainNode.gain.linearRampToValueAtTime(1, now + Math.min(settings.crossfadeSeconds, 3));
+        } else {
+          this.gainNode.gain.value = 1;
         }
-
-        await targetAudio.play();
-
-        setTimeout(() => {
-          currentAudio.pause();
-          currentAudio.currentTime = 0;
-          this.activePlayer = nextPlayer;
-          this.isCrossfading = false;
-        }, crossfadeMs);
-      } else {
-        // Instant switch
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        
-        if (this.gainA && this.gainB && this.audioCtx) {
-          this.gainA.gain.value = nextPlayer === 'A' ? 1 : 0;
-          this.gainB.gain.value = nextPlayer === 'B' ? 1 : 0;
-        }
-
-        await targetAudio.play();
-        this.activePlayer = nextPlayer;
       }
 
-      this.updateMediaSessionMetadata(track);
+      await this.audio.play();
+      this.isTransitioningTrack = false;
+
+      if (previousBlobUrl) {
+        URL.revokeObjectURL(previousBlobUrl);
+      }
+
+      this.registerExclusiveMediaSessionHandlers();
       this.startPositionStateTracker();
     } catch (err) {
+      this.isTransitioningTrack = false;
       console.error('Playback error:', err);
       throw err;
     }
   }
 
   public togglePlayPause(): boolean {
-    const audio = this.activePlayer === 'A' ? this.audioA : this.audioB;
-    if (audio.paused) {
-      audio.play();
+    this.stopAllOtherAudioSources();
+    if (this.audio.paused) {
+      this.startAudioFocusKeepAlive();
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+      this.audio.play().catch(() => {});
       return true;
     } else {
-      audio.pause();
+      this.isTransitioningTrack = false;
+      this.audio.pause();
+      this.stopAudioFocusKeepAlive();
       return false;
     }
   }
 
+  public stopAndCleanup() {
+    this.isTransitioningTrack = false;
+    this.stopAudioFocusKeepAlive();
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    if (this.currentBlobUrl) {
+      URL.revokeObjectURL(this.currentBlobUrl);
+      this.currentBlobUrl = null;
+    }
+  }
+
   public seek(time: number) {
-    const audio = this.activePlayer === 'A' ? this.audioA : this.audioB;
-    audio.currentTime = time;
+    if (!isNaN(time) && isFinite(time)) {
+      this.audio.currentTime = time;
+    }
   }
 
   public setVolume(vol: number) {
-    this.audioA.volume = vol;
-    this.audioB.volume = vol;
+    this.audio.volume = vol;
   }
 
-  public async prewarmNextTracks(tracks: Track[], currentIndex: number, token: string | null, count: number) {
-    for (let i = 1; i <= count; i++) {
-      const nextTrack = tracks[currentIndex + i];
+  public async prewarmNextTracks(tracks: Track[], currentIndex: number, token: string | null, count = 2) {
+    const limit = Math.max(1, Math.min(count, 3));
+    for (let i = 1; i <= limit; i++) {
+      const nextTrack = tracks[(currentIndex + i) % tracks.length];
       if (nextTrack) {
         try {
           const cached = await AudioCacheDB.getBlob(nextTrack.id);
@@ -275,22 +411,12 @@ export class AudioEngine {
         artist: track.artist || 'Google Drive Music',
         album: track.album || 'AudioCar Drive',
         artwork: [
-          { src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&h=512&fit=crop', sizes: '512x512', type: 'image/jpeg' }
+          {
+            src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&h=512&fit=crop',
+            sizes: '512x512',
+            type: 'image/jpeg'
+          }
         ]
-      });
-
-      navigator.mediaSession.setActionHandler('play', () => {
-        const audio = this.activePlayer === 'A' ? this.audioA : this.audioB;
-        audio.play();
-      });
-      navigator.mediaSession.setActionHandler('pause', () => {
-        const audio = this.activePlayer === 'A' ? this.audioA : this.audioB;
-        audio.pause();
-      });
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== undefined) {
-          this.seek(details.seekTime);
-        }
       });
     }
   }
@@ -299,15 +425,14 @@ export class AudioEngine {
     if (this.positionStateInterval) clearInterval(this.positionStateInterval);
     this.positionStateInterval = setInterval(() => {
       if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-        const audio = this.activePlayer === 'A' ? this.audioA : this.audioB;
-        if (!audio.paused && !isNaN(audio.duration)) {
+        if (!this.audio.paused && !isNaN(this.audio.duration) && this.audio.duration > 0) {
           try {
             navigator.mediaSession.setPositionState({
-              duration: audio.duration,
-              playbackRate: audio.playbackRate,
-              position: audio.currentTime
+              duration: this.audio.duration,
+              playbackRate: this.audio.playbackRate,
+              position: Math.min(this.audio.currentTime, this.audio.duration)
             });
-          } catch (e) {
+          } catch {
             // ignore
           }
         }

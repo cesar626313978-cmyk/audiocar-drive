@@ -63,18 +63,40 @@ export default function App() {
   const [hasTeslaSession, setHasTeslaSession] = useState<boolean>(false);
   const [teslaShiftState, setTeslaShiftState] = useState<string | null>(null);
   const isReverseDimmedRef = useRef<boolean>(false);
+  const nextTrackRef = useRef<() => void>(() => {});
+  const prevTrackRef = useRef<() => void>(() => {});
 
-  // Initialize audio engine callbacks and settings on mount
+  // Initialize single exclusive audio engine, MediaSession, and hide any external Hub mini-player on mount
   useEffect(() => {
+    audioEngine.stopAllOtherAudioSources();
+
+    // Hide any persistent mini-player inherited from parent Hub layout if present in DOM
+    try {
+      const externalPlayers = document.querySelectorAll(
+        '#hub-mini-player, .hub-mini-player, [data-hub-player], footer:not([data-player="audiocar-drive-single-footer"])'
+      );
+      externalPlayers.forEach((el) => {
+        (el as HTMLElement).style.display = 'none';
+      });
+    } catch {
+      // ignore
+    }
+
     audioEngine.setCallbacks(
       (time, duration) => {
         setPlaybackState(prev => ({ ...prev, currentTime: time, duration: duration || prev.duration }));
       },
       () => {
-        handleNextTrack();
+        nextTrackRef.current();
       },
       (isPlaying) => {
         setPlaybackState(prev => ({ ...prev, isPlaying }));
+      },
+      () => {
+        prevTrackRef.current();
+      },
+      () => {
+        nextTrackRef.current();
       }
     );
 
@@ -325,6 +347,9 @@ export default function App() {
     }
   };
 
+  nextTrackRef.current = handleNextTrack;
+  prevTrackRef.current = handlePrevTrack;
+
   const handleSeek = (time: number) => {
     audioEngine.seek(time);
     setPlaybackState(prev => ({ ...prev, currentTime: time }));
@@ -383,6 +408,7 @@ export default function App() {
         }}
         onChangeAccount={handleChangeAccount}
         onLogout={() => {
+          audioEngine.stopAndCleanup();
           GoogleDriveAuth.revokeToken();
           setToken(null);
           setIsAuthenticated(false);
@@ -416,8 +442,9 @@ export default function App() {
 
       {/* Main Responsive Grid Layout:
           - Desktop / Tesla Park (>= 1100px): 2 columns side-by-side
-          - Tesla Drive Split-Screen (< 1100px): Full-width toggle between Library & Player + bottom fixed DrivingHUD */}
-      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-6 max-w-[1600px] w-full mx-auto pb-24 min-[1100px]:pb-5">
+          - Tesla Drive Split-Screen (< 1100px): Full-width toggle between Library & Player
+          - Single fixed bottom footer (DrivingHUD) across all viewports */}
+      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-6 max-w-[1600px] w-full mx-auto pb-28">
         {/* Left Column: Folder Explorer */}
         <div
           className={`min-[1100px]:col-span-5 xl:col-span-5 h-full min-h-0 ${
@@ -438,7 +465,7 @@ export default function App() {
           />
         </div>
 
-        {/* Right Column: Player Panel */}
+        {/* Right Column: Player Panel (Artwork & Visualizer only, zero duplicate controls) */}
         <div
           className={`min-[1100px]:col-span-7 xl:col-span-7 h-full min-h-0 ${
             mobileView === 'player' ? 'block' : 'hidden min-[1100px]:block'
@@ -447,44 +474,37 @@ export default function App() {
           <PlayerPanel
             currentTrack={playbackState.currentTrack}
             isPlaying={playbackState.isPlaying}
-            currentTime={playbackState.currentTime}
-            duration={playbackState.duration}
-            volume={playbackState.volume}
-            repeatMode={playbackState.repeatMode}
-            shuffle={playbackState.shuffle}
             isOffline={playbackState.isOffline}
             hasTeslaSession={hasTeslaSession}
             teslaShiftState={teslaShiftState}
-            onTogglePlay={handleTogglePlay}
-            onNext={handleNextTrack}
-            onPrev={handlePrevTrack}
-            onSeek={handleSeek}
-            onVolumeChange={handleVolumeChange}
-            onTeslaVolumeDown={handleTeslaVolumeDown}
-            onTeslaVolumeUp={handleTeslaVolumeUp}
-            onToggleRepeat={() => {
-              const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
-              const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
-              setPlaybackState(prev => ({ ...prev, repeatMode: next }));
-            }}
-            onToggleShuffle={() => setPlaybackState(prev => ({ ...prev, shuffle: !prev.shuffle }))}
             onOpenFolders={() => setMobileView('library')}
           />
         </div>
       </main>
 
-      {/* Tesla Drive Mode Compact Mini-Player Bar (Fixed at bottom on viewports < 1100px) */}
+      {/* Single Fixed Bottom Player Footer for AudioCar Drive */}
       <DrivingHUD
         currentTrack={playbackState.currentTrack}
         isPlaying={playbackState.isPlaying}
         currentTime={playbackState.currentTime}
         duration={playbackState.duration}
+        volume={playbackState.volume}
+        repeatMode={playbackState.repeatMode}
+        shuffle={playbackState.shuffle}
         isOffline={playbackState.isOffline}
         mobileView={mobileView}
         hasTeslaSession={hasTeslaSession}
         onTogglePlay={handleTogglePlay}
         onNext={handleNextTrack}
         onPrev={handlePrevTrack}
+        onSeek={handleSeek}
+        onVolumeChange={handleVolumeChange}
+        onToggleRepeat={() => {
+          const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
+          const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
+          setPlaybackState(prev => ({ ...prev, repeatMode: next }));
+        }}
+        onToggleShuffle={() => setPlaybackState(prev => ({ ...prev, shuffle: !prev.shuffle }))}
         onToggleMobileView={() => setMobileView(prev => (prev === 'player' ? 'library' : 'player'))}
         onTeslaVolumeDown={handleTeslaVolumeDown}
         onTeslaVolumeUp={handleTeslaVolumeUp}
