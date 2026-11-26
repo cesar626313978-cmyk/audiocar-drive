@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/drive/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/drive/(.*)",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

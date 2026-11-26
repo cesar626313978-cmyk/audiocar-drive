@@ -10,9 +10,20 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
-      // Copies src/assets into dist/ so root-relative URLs like
-      // "/src/assets/images/..." (e.g. generate_image output) still resolve
-      // in production builds. Do not remove.
+      // Dev-server middleware so both "/" (AI Studio Preview root) and "/drive/" render seamlessly
+      {
+        name: 'dual-base-dev-middleware',
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            if (req.url && (req.url === '/' || req.url.startsWith('/?'))) {
+              req.url = '/drive/' + req.url.slice(1);
+            }
+            next();
+          });
+        },
+      },
+      // Copies src/assets into dist/ AND mirrors dist/assets into dist/drive/assets
+      // so both "/drive/assets/..." and "/assets/..." resolve in Vercel production deployments.
       {
         name: 'copy-unbundled-src-assets',
         apply: 'build',
@@ -25,6 +36,21 @@ export default defineConfig(() => {
           const distAssets = path.resolve(distDir, 'src/assets');
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
+          }
+
+          // Mirror built assets under dist/drive/assets and dist/drive/index.html
+          // so base: '/drive/' resolves physically whether accessed via subpath rewrite or direct root
+          const builtAssets = path.resolve(distDir, 'assets');
+          const driveDir = path.resolve(distDir, 'drive');
+          const driveAssets = path.resolve(driveDir, 'assets');
+          const builtIndex = path.resolve(distDir, 'index.html');
+          if (fs.existsSync(builtAssets)) {
+            fs.mkdirSync(driveDir, {recursive: true});
+            fs.cpSync(builtAssets, driveAssets, {recursive: true, force: true});
+          }
+          if (fs.existsSync(builtIndex)) {
+            fs.mkdirSync(driveDir, {recursive: true});
+            fs.copyFileSync(builtIndex, path.resolve(driveDir, 'index.html'));
           }
         },
       },
