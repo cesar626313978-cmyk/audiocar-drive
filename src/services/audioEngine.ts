@@ -240,18 +240,6 @@ export class AudioEngine {
         this.audio.play().catch(() => {});
       }
     });
-
-    // Global postMessage listener for parent Launcher volume commands ({ type: 'AUDIOCAR_SET_VOLUME', level })
-    if (typeof window !== 'undefined') {
-      window.addEventListener('message', (event: MessageEvent) => {
-        if (event.data && event.data.type === 'AUDIOCAR_SET_VOLUME') {
-          const rawLevel = Number(event.data.level);
-          if (!isNaN(rawLevel)) {
-            this.setVolume(rawLevel);
-          }
-        }
-      });
-    }
   }
 
   public setCallbacks(
@@ -429,13 +417,7 @@ export class AudioEngine {
   }
 
   public setVolume(vol: number) {
-    const clamped = Math.max(0, Math.min(1, Number(vol)));
-    if (!isNaN(clamped)) {
-      this.audio.volume = clamped;
-      document.querySelectorAll('audio').forEach((el) => {
-        el.volume = clamped;
-      });
-    }
+    this.audio.volume = vol;
   }
 
   public async prewarmNextTracks(tracks: Track[], currentIndex: number, token: string | null, count = 2) {
