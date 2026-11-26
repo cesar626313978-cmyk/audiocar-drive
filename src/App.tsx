@@ -113,7 +113,23 @@ export default function App() {
     };
     checkTeslaSession();
     window.addEventListener('storage', checkTeslaSession);
-    return () => window.removeEventListener('storage', checkTeslaSession);
+
+    // Global postMessage listener for parent Launcher volume commands ({ type: 'AUDIOCAR_SET_VOLUME', level })
+    const handleLauncherMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'AUDIOCAR_SET_VOLUME') {
+        const level = Math.max(0, Math.min(1, Number(event.data.level)));
+        if (!isNaN(level)) {
+          audioEngine.setVolume(level);
+          setPlaybackState(prev => ({ ...prev, volume: level }));
+        }
+      }
+    };
+    window.addEventListener('message', handleLauncherMessage);
+
+    return () => {
+      window.removeEventListener('storage', checkTeslaSession);
+      window.removeEventListener('message', handleLauncherMessage);
+    };
   }, []);
 
   // Poll Tesla drive_state every 4 seconds when autoDimOnReverse is enabled and Tesla session exists
