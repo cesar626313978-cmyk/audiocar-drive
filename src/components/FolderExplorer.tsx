@@ -11,6 +11,7 @@ import {
   ArrowUp,
   Home,
   Play,
+  Shuffle,
   LayoutGrid,
   List,
   X
@@ -20,7 +21,8 @@ interface FolderExplorerProps {
   library: PlaylistFolder;
   currentTrack: Track | null;
   isPlaying: boolean;
-  onSelectTrack: (track: Track, allTracks: Track[]) => void;
+  shuffle?: boolean;
+  onSelectTrack: (track: Track, allTracks: Track[], enableShuffle?: boolean) => void;
   onDownloadTrack: (track: Track) => void;
   downloadedTrackIds: Set<string>;
 }
@@ -31,6 +33,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   library,
   currentTrack,
   isPlaying,
+  shuffle,
   onSelectTrack,
   onDownloadTrack,
   downloadedTrackIds
@@ -138,7 +141,21 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         : getFolderAllTracks(activeFolder);
 
     if (tracksToPlay.length > 0) {
-      onSelectTrack(tracksToPlay[0], tracksToPlay);
+      onSelectTrack(tracksToPlay[0], tracksToPlay, false);
+    }
+  };
+
+  const handleShuffleCurrentFolder = () => {
+    const tracksToPlay =
+      viewMode === 'all-tracks'
+        ? allLibraryTracks
+        : activeFolderTracks.length > 0
+        ? activeFolderTracks
+        : getFolderAllTracks(activeFolder);
+
+    if (tracksToPlay.length > 0) {
+      const randomIdx = Math.floor(Math.random() * tracksToPlay.length);
+      onSelectTrack(tracksToPlay[randomIdx], tracksToPlay, true);
     }
   };
 
@@ -242,17 +259,31 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
             })}
           </div>
 
-          {/* Right tools: Play Folder & Grid/List toggle */}
+          {/* Right tools: Shuffle, Play Folder & Grid/List toggle */}
           <div className="flex items-center gap-1.5 shrink-0">
             {(activeFolderTracks.length > 0 || activeSubfolders.length > 0) && (
-              <button
-                onClick={handlePlayCurrentFolder}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-colors"
-                title="Reproducir esta carpeta"
-              >
-                <Play className="w-3 h-3 fill-current" />
-                <span className="hidden sm:inline">Reproducir</span>
-              </button>
+              <>
+                <button
+                  onClick={handleShuffleCurrentFolder}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                    shuffle
+                      ? 'bg-purple-600/30 hover:bg-purple-600/40 text-purple-200 border-purple-500/50 shadow-sm shadow-purple-500/20'
+                      : 'bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border-indigo-500/30'
+                  }`}
+                  title="Reproducir esta carpeta en modo aleatorio (Shuffle)"
+                >
+                  <Shuffle className="w-3 h-3" />
+                  <span>Aleatorio</span>
+                </button>
+                <button
+                  onClick={handlePlayCurrentFolder}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-colors"
+                  title="Reproducir esta carpeta en orden"
+                >
+                  <Play className="w-3 h-3 fill-current" />
+                  <span className="hidden sm:inline">Reproducir</span>
+                </button>
+              </>
             )}
 
             {activeSubfolders.length > 0 && (

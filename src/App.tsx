@@ -183,13 +183,14 @@ export default function App() {
     }
   };
 
-  const handleSelectTrack = async (track: Track, queueList: Track[]) => {
+  const handleSelectTrack = async (track: Track, queueList: Track[], enableShuffle?: boolean) => {
     const index = queueList.findIndex(t => t.id === track.id);
     setPlaybackState(prev => ({
       ...prev,
       currentTrack: track,
       queue: queueList,
-      queueIndex: index >= 0 ? index : 0
+      queueIndex: index >= 0 ? index : 0,
+      shuffle: enableShuffle !== undefined ? enableShuffle : prev.shuffle
     }));
 
     if (!token) return;
@@ -203,7 +204,7 @@ export default function App() {
         const fresh = await GoogleDriveAuth.silentRefresh();
         if (fresh) {
           setToken(fresh);
-          handleSelectTrack(track, queueList);
+          handleSelectTrack(track, queueList, enableShuffle);
         } else {
           setIsAuthenticated(false);
           setIsLoginOpen(true);
@@ -371,8 +372,9 @@ export default function App() {
             library={library}
             currentTrack={playbackState.currentTrack}
             isPlaying={playbackState.isPlaying}
-            onSelectTrack={(track, list) => {
-              handleSelectTrack(track, list);
+            shuffle={playbackState.shuffle}
+            onSelectTrack={(track, list, enableShuffle) => {
+              handleSelectTrack(track, list, enableShuffle);
               setIsMobileDrawerOpen(false);
             }}
             onDownloadTrack={handleDownloadTrack}
