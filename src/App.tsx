@@ -380,14 +380,22 @@ export default function App() {
     setCacheSize(size);
   };
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
   const handleToggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   return (
-    <div className={`h-screen overflow-hidden flex flex-col ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div
+      className={`h-screen overflow-hidden flex flex-col transition-colors duration-200 ${
+        theme === 'dark'
+          ? 'dark bg-slate-950 text-slate-100'
+          : 'bg-[#F4F6F9] text-[#0F172A]'
+      }`}
+    >
       <Navbar
         isAuthenticated={isAuthenticated}
         folderName={folderName}
@@ -422,9 +430,9 @@ export default function App() {
 
       {/* Folder Not Found / API Error Warning Banner */}
       {isAuthenticated && folderNotFound && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-2.5 flex items-center justify-between text-amber-300 text-xs shrink-0">
+        <div className="bg-amber-50 dark:bg-amber-500/10 border-b border-amber-300 dark:border-amber-500/20 px-4 sm:px-6 py-2.5 flex items-center justify-between text-amber-900 dark:text-amber-300 text-xs shrink-0">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <span>
               {folderErrorMsg || `No se encontró la carpeta "mimusica" en la cuenta ${userEmail || 'actual'}.`}
             </span>
@@ -432,7 +440,7 @@ export default function App() {
           <button
             onClick={handleRetry}
             disabled={isRetrying}
-            className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1 bg-amber-200/80 hover:bg-amber-300/80 dark:bg-amber-500/20 dark:hover:bg-amber-500/30 rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {isRetrying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             <span>{isRetrying ? 'Buscando...' : 'Reintentar'}</span>
