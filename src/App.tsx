@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Track, PlaylistFolder, AudioSettings, PlaybackState } from './types/audio';
 import { GoogleDriveAuth, GoogleDriveService } from './services/drive';
+import { TeslaFleetService } from './services/tesla';
 import { audioEngine } from './services/audioEngine';
 import { AudioCacheDB } from './services/db';
 import { Navbar } from './components/Navbar';
@@ -9,7 +10,7 @@ import { PlayerPanel } from './components/PlayerPanel';
 import { DrivingHUD } from './components/DrivingHUD';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
-import { X, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -33,7 +34,8 @@ export default function App() {
     agcEnabled: true,
     eqBands: { bass: 2, mid: 0, treble: 1 },
     bufferAheadCount: 3,
-    theme: 'dark'
+    theme: 'dark',
+    autoDimOnReverse: true
   });
 
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -53,7 +55,14 @@ export default function App() {
   const [downloadedTrackIds, setDownloadedTrackIds] = useState<Set<string>>(new Set());
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
-  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
+
+  // Dual view switcher for screens < 1100px (Tesla Drive Split-Screen)
+  const [mobileView, setMobileView] = useState<'player' | 'library'>('library');
+
+  // Tesla Fleet API Session & Shift State
+  const [hasTeslaSession, setHasTeslaSession] = useState<boolean>(false);
+  const [teslaShiftState, setTeslaShiftState] = useState<string | null>(null);
+  const isReverseDimmedRef = useRef<boolean>(false);
 
   // Initialize audio engine callbacks and settings on mount
   useEffect(() => {
@@ -72,9 +81,42 @@ export default function App() {
     audioEngine.updateSettings(settings);
     AudioCacheDB.getCacheSizeMB().then(setCacheSize);
 
-    // Attempt autoconnection / silent renewal
+    // Attempt autoconnection / silent renewal for Google Drive
     checkAndRestoreSession();
+
+    // Check shared Tesla Fleet API session in localStorage ('audiocar_tesla_session')
+    const checkTeslaSession = () => {
+      const session = TeslaFleetService.getSession();
+      setHasTeslaSession(Boolean(session && session.access_token));
+    };
+    checkTeslaSession();
+    window.addEventListener('storage', checkTeslaSession);
+    return () => window.removeEventListener('storage', checkTeslaSession);
   }, []);
+
+  // Poll Tesla drive_state every 4 seconds when autoDimOnReverse is enabled and Tesla session exists
+  useEffect(() => {
+    if (!hasTeslaSession || !settings.autoDimOnReverse) return;
+
+    const pollDriveState = async () => {
+      const { shift_state } = await TeslaFleetService.getShiftState();
+      if (shift_state) {
+        setTeslaShiftState(shift_state);
+
+        if (shift_state === 'R' && !isReverseDimmedRef.current) {
+          isReverseDimmedRef.current = true;
+          await TeslaFleetService.sendCommand('media_volume_down', 3);
+        } else if ((shift_state === 'D' || shift_state === 'P') && isReverseDimmedRef.current) {
+          isReverseDimmedRef.current = false;
+          await TeslaFleetService.sendCommand('media_volume_up', 3);
+        }
+      }
+    };
+
+    pollDriveState();
+    const interval = setInterval(pollDriveState, 4000);
+    return () => clearInterval(interval);
+  }, [hasTeslaSession, settings.autoDimOnReverse]);
 
   const checkAndRestoreSession = async () => {
     let activeToken = GoogleDriveAuth.getStoredToken();
@@ -218,10 +260,24 @@ export default function App() {
   const handleTogglePlay = async () => {
     if (!playbackState.currentTrack && playbackState.queue.length > 0) {
       await handleSelectTrack(playbackState.queue[0], playbackState.queue);
+      if (hasTeslaSession) {
+        TeslaFleetService.sendCommand('media_toggle_playback');
+      }
       return;
     }
     const playing = audioEngine.togglePlayPause();
     setPlaybackState(prev => ({ ...prev, isPlaying: playing }));
+    if (hasTeslaSession) {
+      TeslaFleetService.sendCommand('media_toggle_playback');
+    }
+  };
+
+  const handleTeslaVolumeDown = () => {
+    TeslaFleetService.sendCommand('media_volume_down', 1);
+  };
+
+  const handleTeslaVolumeUp = () => {
+    TeslaFleetService.sendCommand('media_volume_up', 1);
   };
 
   const handleNextTrack = async () => {
@@ -306,13 +362,15 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`h-screen overflow-hidden flex flex-col ${theme === 'dark' ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       <Navbar
         isAuthenticated={isAuthenticated}
         folderName={folderName}
         theme={theme}
         userEmail={userEmail}
         userPicture={userPicture}
+        mobileView={mobileView}
+        onToggleMobileView={() => setMobileView(prev => (prev === 'player' ? 'library' : 'player'))}
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLogin={() => {
@@ -338,7 +396,7 @@ export default function App() {
 
       {/* Folder Not Found / API Error Warning Banner */}
       {isAuthenticated && folderNotFound && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between text-amber-300 text-xs">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-2.5 flex items-center justify-between text-amber-300 text-xs shrink-0">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
@@ -356,18 +414,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Responsive Grid Layout (Tesla Park / Desktop vs Drive) */}
-      <main className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] w-full mx-auto pb-24 lg:pb-6">
-        {/* Left Column: Folder Explorer (Hidden on mobile unless toggled) */}
-        <div className={`lg:col-span-5 xl:col-span-4 h-[calc(100vh-140px)] ${isMobileDrawerOpen ? 'fixed inset-x-4 top-20 z-50 bg-slate-950/95 p-4 rounded-3xl border border-slate-800 shadow-2xl' : 'hidden lg:block'}`}>
-          {isMobileDrawerOpen && (
-            <div className="flex justify-between items-center mb-4 lg:hidden">
-              <h3 className="font-bold text-white">mimusica Library</h3>
-              <button onClick={() => setIsMobileDrawerOpen(false)} className="p-2 text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+      {/* Main Responsive Grid Layout:
+          - Desktop / Tesla Park (>= 1100px): 2 columns side-by-side
+          - Tesla Drive Split-Screen (< 1100px): Full-width toggle between Library & Player + bottom fixed DrivingHUD */}
+      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-6 max-w-[1600px] w-full mx-auto pb-24 min-[1100px]:pb-5">
+        {/* Left Column: Folder Explorer */}
+        <div
+          className={`min-[1100px]:col-span-5 xl:col-span-5 h-full min-h-0 ${
+            mobileView === 'library' ? 'block' : 'hidden min-[1100px]:block'
+          }`}
+        >
           <FolderExplorer
             library={library}
             currentTrack={playbackState.currentTrack}
@@ -375,15 +431,19 @@ export default function App() {
             shuffle={playbackState.shuffle}
             onSelectTrack={(track, list, enableShuffle) => {
               handleSelectTrack(track, list, enableShuffle);
-              setIsMobileDrawerOpen(false);
             }}
             onDownloadTrack={handleDownloadTrack}
             downloadedTrackIds={downloadedTrackIds}
+            onSwitchToPlayer={() => setMobileView('player')}
           />
         </div>
 
         {/* Right Column: Player Panel */}
-        <div className="lg:col-span-7 xl:col-span-8 h-[calc(100vh-140px)]">
+        <div
+          className={`min-[1100px]:col-span-7 xl:col-span-7 h-full min-h-0 ${
+            mobileView === 'player' ? 'block' : 'hidden min-[1100px]:block'
+          }`}
+        >
           <PlayerPanel
             currentTrack={playbackState.currentTrack}
             isPlaying={playbackState.isPlaying}
@@ -393,32 +453,41 @@ export default function App() {
             repeatMode={playbackState.repeatMode}
             shuffle={playbackState.shuffle}
             isOffline={playbackState.isOffline}
+            hasTeslaSession={hasTeslaSession}
+            teslaShiftState={teslaShiftState}
             onTogglePlay={handleTogglePlay}
             onNext={handleNextTrack}
             onPrev={handlePrevTrack}
             onSeek={handleSeek}
             onVolumeChange={handleVolumeChange}
+            onTeslaVolumeDown={handleTeslaVolumeDown}
+            onTeslaVolumeUp={handleTeslaVolumeUp}
             onToggleRepeat={() => {
               const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
               const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
               setPlaybackState(prev => ({ ...prev, repeatMode: next }));
             }}
             onToggleShuffle={() => setPlaybackState(prev => ({ ...prev, shuffle: !prev.shuffle }))}
+            onOpenFolders={() => setMobileView('library')}
           />
         </div>
       </main>
 
-      {/* Tesla Drive Mode Compact HUD (Viewports ≤ 900px) */}
+      {/* Tesla Drive Mode Compact Mini-Player Bar (Fixed at bottom on viewports < 1100px) */}
       <DrivingHUD
         currentTrack={playbackState.currentTrack}
         isPlaying={playbackState.isPlaying}
         currentTime={playbackState.currentTime}
         duration={playbackState.duration}
         isOffline={playbackState.isOffline}
+        mobileView={mobileView}
+        hasTeslaSession={hasTeslaSession}
         onTogglePlay={handleTogglePlay}
         onNext={handleNextTrack}
         onPrev={handlePrevTrack}
-        onOpenFolderDrawer={() => setIsMobileDrawerOpen(true)}
+        onToggleMobileView={() => setMobileView(prev => (prev === 'player' ? 'library' : 'player'))}
+        onTeslaVolumeDown={handleTeslaVolumeDown}
+        onTeslaVolumeUp={handleTeslaVolumeUp}
       />
 
       {/* Modals */}

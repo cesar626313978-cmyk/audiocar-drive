@@ -31,6 +31,15 @@ export interface AudioSettings {
   };
   bufferAheadCount: number; // 1, 3, or 5 tracks
   theme: 'dark' | 'light' | 'auto';
+  autoDimOnReverse: boolean; // Atenuar volumen al aparcar (Marcha Atrás)
+}
+
+export interface TeslaSession {
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: number;
+  vehicle_id?: string | number;
+  vehicle_name?: string;
 }
 
 export interface PlaybackState {

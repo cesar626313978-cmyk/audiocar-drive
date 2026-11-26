@@ -67,8 +67,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             <div className="flex items-center gap-3">
               <Zap className="w-5 h-5 text-amber-400" />
               <div>
-                <h4 className="text-sm font-medium text-white">Levelador Dinámico (AGC)</h4>
-                <p className="text-xs text-slate-400">Equalize volume loudness across old and modern tracks</p>
+                <h4 className="text-sm font-medium text-white">Nivelador Dinámico (AGC)</h4>
+                <p className="text-xs text-slate-400">Iguala el volumen entre canciones antiguas y modernas</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -79,6 +79,28 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                 className="sr-only peer"
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {/* Tesla Auto-Dim on Reverse Gear (R) Switch */}
+          <div className="flex items-center justify-between p-4 bg-slate-950/40 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              <div>
+                <h4 className="text-sm font-medium text-white">Atenuar volumen al aparcar (Marcha Atrás)</h4>
+                <p className="text-xs text-slate-400">
+                  Baja el volumen del Tesla (-3) al poner la marcha <strong className="text-slate-200">R</strong> y lo restaura (+3) al pasar a <strong className="text-slate-200">D</strong> o <strong className="text-slate-200">P</strong>
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.autoDimOnReverse}
+                onChange={(e) => onChangeSettings({ ...settings, autoDimOnReverse: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
             </label>
           </div>
 
