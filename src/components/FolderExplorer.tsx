@@ -23,6 +23,8 @@ interface FolderExplorerProps {
   currentTrack: Track | null;
   isPlaying: boolean;
   shuffle?: boolean;
+  selectedFolderId?: string;
+  onFolderChange?: (folderId: string, folderName: string) => void;
   onSelectTrack: (track: Track, allTracks: Track[], enableShuffle?: boolean) => void;
   onDownloadTrack: (track: Track) => void;
   downloadedTrackIds: Set<string>;
@@ -36,20 +38,17 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   currentTrack,
   isPlaying,
   shuffle,
+  selectedFolderId,
+  onFolderChange,
   onSelectTrack,
   onDownloadTrack,
   downloadedTrackIds,
   onSwitchToPlayer
 }) => {
-  const [currentFolderId, setCurrentFolderId] = useState<string>(library.id);
+  const [currentFolderId, setCurrentFolderId] = useState<string>(selectedFolderId || library.id);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'explorer' | 'all-tracks'>('explorer');
   const [folderDisplayStyle, setFolderDisplayStyle] = useState<'list' | 'grid'>('list');
-
-  // Sync root folder ID when library loads or changes
-  useEffect(() => {
-    setCurrentFolderId(library.id);
-  }, [library.id]);
 
   // Build path of folders from root to target id for Windows-style breadcrumbs
   const findFolderPath = (
@@ -68,12 +67,27 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
     return null;
   };
 
+  // Sync folder ID when library loads, preserving selectedFolderId if it exists in the library tree
+  useEffect(() => {
+    if (selectedFolderId && findFolderPath(library, selectedFolderId)) {
+      setCurrentFolderId(selectedFolderId);
+    } else if (!findFolderPath(library, currentFolderId)) {
+      setCurrentFolderId(library.id);
+    }
+  }, [library, selectedFolderId]);
+
   const breadcrumbPath = useMemo(() => {
     return findFolderPath(library, currentFolderId) || [library];
   }, [library, currentFolderId]);
 
   const activeFolder = breadcrumbPath[breadcrumbPath.length - 1] || library;
   const parentFolder = breadcrumbPath.length > 1 ? breadcrumbPath[breadcrumbPath.length - 2] : null;
+
+  useEffect(() => {
+    if (onFolderChange && activeFolder && activeFolder.id !== 'root-empty') {
+      onFolderChange(activeFolder.id, activeFolder.name);
+    }
+  }, [activeFolder.id, activeFolder.name]);
 
   // Helper to count and gather all tracks inside a folder recursively
   const getFolderAllTracks = (folder: PlaylistFolder): Track[] => {

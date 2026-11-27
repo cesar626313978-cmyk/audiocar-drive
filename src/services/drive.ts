@@ -3,6 +3,7 @@ import { Track, PlaylistFolder } from '../types/audio';
 const TOKEN_KEY = 'audiocar_access_token';
 const EXPIRES_KEY = 'audiocar_expires_at';
 const EMAIL_KEY = 'audiocar_user_email';
+const USER_HINT_KEY = 'audiocar_user_hint';
 const PICTURE_KEY = 'audiocar_user_picture';
 const FOLDER_ID_KEY = 'audiocar_mimusica_folder_id';
 const CLIENT_ID_KEY = 'audiocar_client_id';
@@ -22,7 +23,11 @@ export class GoogleDriveAuth {
   }
 
   static getStoredEmail(): string | null {
-    return localStorage.getItem(EMAIL_KEY);
+    return localStorage.getItem(EMAIL_KEY) || localStorage.getItem(USER_HINT_KEY);
+  }
+
+  static getUserHint(): string | null {
+    return localStorage.getItem(USER_HINT_KEY) || localStorage.getItem(EMAIL_KEY);
   }
 
   static getStoredPicture(): string | null {
@@ -37,17 +42,26 @@ export class GoogleDriveAuth {
     localStorage.setItem(CLIENT_ID_KEY, clientId);
   }
 
-  static clearSession(): void {
+  static clearSession(clearHint = false): void {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(EXPIRES_KEY);
     localStorage.removeItem(EMAIL_KEY);
     localStorage.removeItem(PICTURE_KEY);
     localStorage.removeItem(FOLDER_ID_KEY);
+    if (clearHint) {
+      localStorage.removeItem(USER_HINT_KEY);
+    }
   }
 
   static async loadGISScript(): Promise<void> {
     if ((window as any).google?.accounts?.oauth2) return;
     return new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve());
+        existing.addEventListener('error', (err) => reject(err));
+        return;
+      }
       const script = document.createElement('script');
       script.src = 'https://accounts.google.com/gsi/client';
       script.async = true;
@@ -63,17 +77,19 @@ export class GoogleDriveAuth {
     const google = (window as any).google;
     if (!google || !google.accounts) throw new Error('Google Identity Services failed to load');
 
+    const hint = this.getUserHint();
     this.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: SCOPES,
-      prompt: promptValue || '',
+      prompt: promptValue !== undefined ? promptValue : '',
+      hint: hint || undefined,
       callback: async (resp: any) => {
         if (resp && resp.access_token) {
           const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600;
           const expiresAt = Date.now() + expiresIn * 1000 - 300000; // 5 min buffer
           localStorage.setItem(TOKEN_KEY, resp.access_token);
           localStorage.setItem(EXPIRES_KEY, expiresAt.toString());
-          
+
           await this.fetchUserInfo(resp.access_token);
         }
         callback(resp);
@@ -91,6 +107,7 @@ export class GoogleDriveAuth {
       const data = await res.json();
       if (data.email) {
         localStorage.setItem(EMAIL_KEY, data.email);
+        localStorage.setItem(USER_HINT_KEY, data.email);
       }
       if (data.picture) {
         localStorage.setItem(PICTURE_KEY, data.picture);
@@ -104,17 +121,21 @@ export class GoogleDriveAuth {
 
   static async silentRefresh(): Promise<string | null> {
     const clientId = this.getStoredClientId();
-    const email = this.getStoredEmail();
+    const hintEmail = this.getUserHint();
     if (!clientId) return null;
 
     try {
       await this.loadGISScript();
       const google = (window as any).google;
       return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => resolve(null), 8000);
         const client = google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope: SCOPES,
+          prompt: '',
+          hint: hintEmail || undefined,
           callback: async (resp: any) => {
+            clearTimeout(timeoutId);
             if (resp && resp.access_token) {
               const expiresIn = resp.expires_in ? Number(resp.expires_in) : 3600;
               const expiresAt = Date.now() + expiresIn * 1000 - 300000;
@@ -127,7 +148,7 @@ export class GoogleDriveAuth {
             }
           }
         });
-        client.requestAccessToken({ prompt: '', hint: email || undefined });
+        client.requestAccessToken({ prompt: '', hint: hintEmail || undefined });
       });
     } catch {
       return null;
@@ -142,7 +163,7 @@ export class GoogleDriveAuth {
         console.log('Token revoked');
       });
     }
-    this.clearSession();
+    this.clearSession(true);
   }
 }
 
@@ -153,6 +174,10 @@ export class GoogleDriveService {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` }
     });
+
+    if (res.status === 401) {
+      throw new Error('UNAUTHORIZED');
+    }
 
     if (!res.ok) {
       let errorMsg = `Error ${res.status}`;
@@ -182,8 +207,7 @@ export class GoogleDriveService {
   static async fetchMimusicaLibrary(token: string, folderId: string): Promise<PlaylistFolder> {
     try {
       const subfolders = await this.fetchFolderRecursive(token, folderId);
-      
-      // Collect root tracks + subfolders tracks
+
       const rootTracks = subfolders.tracks || [];
       const allSubfolders = subfolders.subfolders || [];
 
@@ -246,25 +270,32 @@ export class GoogleDriveService {
     };
   }
 
-  static async fetchAudioBlobWithRetry(track: Track, token: string | null): Promise<Blob> {
-    const url = track.downloadUrl;
-    if (!url) throw new Error('No download URL available');
+  static async fetchAudioBlobWithRetry(track: Track, token: string | null, signal?: AbortSignal): Promise<Blob> {
+    const url = track.downloadUrl || `https://www.googleapis.com/drive/v3/files/${track.id}?alt=media`;
+    if (!token) throw new Error('UNAUTHORIZED');
 
     let retries = 3;
-    let delay = 1000;
+    let delay = 800;
 
     while (retries > 0) {
+      if (signal?.aborted) {
+        throw new DOMException('Track download aborted', 'AbortError');
+      }
       try {
         const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
+          signal
         });
         if (res.status === 401) {
           throw new Error('UNAUTHORIZED');
         }
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         return await res.blob();
-      } catch (err) {
-        if ((err as Error).message === 'UNAUTHORIZED') throw err;
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || signal?.aborted) {
+          throw new DOMException('Track download aborted', 'AbortError');
+        }
+        if (err?.message === 'UNAUTHORIZED') throw err;
         retries--;
         if (retries === 0) throw err;
         await new Promise((r) => setTimeout(r, delay));

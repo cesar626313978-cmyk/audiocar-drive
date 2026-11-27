@@ -1,6 +1,6 @@
 import React from 'react';
 import { Track } from '../types/audio';
-import { ShieldCheck, Radio, Disc, Folder } from 'lucide-react';
+import { ShieldCheck, Radio, Disc, Folder, Play, Clock } from 'lucide-react';
 import { AudioVisualizer } from './AudioVisualizer';
 
 interface PlayerPanelProps {
@@ -9,6 +9,9 @@ interface PlayerPanelProps {
   isOffline: boolean;
   hasTeslaSession?: boolean;
   teslaShiftState?: string | null;
+  showResumeOverlay?: boolean;
+  resumeTime?: number;
+  onResumeNow?: () => void;
   onOpenFolders?: () => void;
 }
 
@@ -18,8 +21,18 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   isOffline,
   hasTeslaSession,
   teslaShiftState,
+  showResumeOverlay,
+  resumeTime = 0,
+  onResumeNow,
   onOpenFolders
 }) => {
+  const formatTime = (sec: number) => {
+    if (!sec || isNaN(sec) || !isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   return (
     <div className="flex flex-col items-center justify-between h-full bg-white dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-[#E2E8F0] dark:border-slate-800 p-4 sm:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-2xl relative overflow-hidden">
       {/* Background ambient glow */}
@@ -99,6 +112,53 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
 
         {/* High-Definition 56-Bar Symmetric Canvas Visualizer */}
         <AudioVisualizer isPlaying={isPlaying} />
+
+        {/* Large Autoplay-Blocked Session Resume Overlay Card */}
+        {showResumeOverlay && currentTrack && (
+          <div
+            onClick={onResumeNow}
+            className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-white/90 dark:bg-slate-950/85 backdrop-blur-md rounded-2xl cursor-pointer animate-fade-in"
+          >
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 border-2 border-[#93C5FD] dark:border-blue-500/60 rounded-3xl p-5 shadow-2xl flex flex-col items-center text-center gap-4">
+              <div className="flex items-center gap-3.5 w-full text-left">
+                <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-900 border border-[#CBD5E1] dark:border-slate-700 shrink-0">
+                  <img
+                    src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&h=200&fit=crop"
+                    alt="Carátula"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#DBEAFE] text-[#1D4ED8] dark:bg-blue-500/20 dark:text-blue-300 mb-1">
+                    <Clock className="w-3 h-3" />
+                    Sesión guardada · {formatTime(resumeTime)}
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white truncate">
+                    {currentTrack.name}
+                  </h3>
+                  <p className="text-xs font-medium text-[#475569] dark:text-slate-400 truncate">
+                    {currentTrack.album || currentTrack.artist || 'mimusica'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onResumeNow) onResumeNow();
+                }}
+                className="w-full min-h-[54px] py-3 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold text-base shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2.5 transition-all"
+              >
+                <Play className="w-6 h-6 fill-current" />
+                <span>Reanudar ahora ({formatTime(resumeTime)})</span>
+              </button>
+              <p className="text-[11px] font-medium text-[#475569] dark:text-slate-400">
+                O toca en cualquier punto libre de la pantalla para continuar
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Subtle bottom status line inside the stage card */}

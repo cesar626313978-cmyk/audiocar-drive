@@ -12,13 +12,14 @@ export class AudioEngine {
   private midFilter: BiquadFilterNode | null = null;
   private trebleFilter: BiquadFilterNode | null = null;
 
-  // Sub-audible keep-alive nodes to prevent Tesla OS / Automotive CarAudioService
-  // from detecting an idle hardware sink during track transitions and jumping to FM Radio
   private keepAliveOsc: OscillatorNode | null = null;
   private keepAliveGain: GainNode | null = null;
   private wakeLock: any = null;
-  private isTransitioningTrack: boolean = false;
 
+  // Atomic request counter & AbortController to prevent track overlap on rapid skips
+  private playRequestId: number = 0;
+  private currentAbortController: AbortController | null = null;
+  private activeTrack: Track | null = null;
   private currentBlobUrl: string | null = null;
 
   private onTimeUpdateCallback: ((time: number, duration: number) => void) | null = null;
@@ -35,6 +36,10 @@ export class AudioEngine {
     this.audio.preload = 'auto';
     this.audio.dataset.engine = 'audiocar-drive-primary';
     this.setupListeners();
+  }
+
+  public getCurrentRequestId(): number {
+    return this.playRequestId;
   }
 
   /**
@@ -108,18 +113,14 @@ export class AudioEngine {
     }
   }
 
-  /**
-   * Starts a continuous sub-audible carrier (-90dB) on the WebAudio hardware sink
-   * so Tesla OS / Automotive Audio Focus never drops to 'none' between tracks.
-   */
   private startAudioFocusKeepAlive() {
     if (!this.audioCtx || this.keepAliveOsc) return;
     try {
       this.keepAliveOsc = this.audioCtx.createOscillator();
       this.keepAliveGain = this.audioCtx.createGain();
       this.keepAliveOsc.type = 'sine';
-      this.keepAliveOsc.frequency.value = 20; // 20Hz sub-audible
-      this.keepAliveGain.gain.value = 0.00001; // -100dB imperceptible keep-alive
+      this.keepAliveOsc.frequency.value = 20;
+      this.keepAliveGain.gain.value = 0.00001;
       this.keepAliveOsc.connect(this.keepAliveGain);
       this.keepAliveGain.connect(this.audioCtx.destination);
       this.keepAliveOsc.start();
@@ -184,13 +185,25 @@ export class AudioEngine {
         .connect(this.trebleFilter)
         .connect(this.compressor);
 
-      // Connect main output directly to destination AND tap into analyser in parallel
       this.compressor.connect(this.audioCtx.destination);
       this.compressor.connect(this.analyser);
 
       this.startAudioFocusKeepAlive();
     } catch (e) {
       console.warn('Web Audio API initialization deferred or failed:', e);
+    }
+  }
+
+  private enforceTeslaExclusiveMediaSessionPlaying() {
+    if (!('mediaSession' in navigator)) return;
+    if (this.activeTrack) {
+      this.updateMediaSessionMetadata(this.activeTrack);
+    }
+    this.registerExclusiveMediaSessionHandlers();
+    try {
+      navigator.mediaSession.playbackState = 'playing';
+    } catch {
+      // ignore
     }
   }
 
@@ -201,41 +214,47 @@ export class AudioEngine {
       }
     });
 
-    this.audio.addEventListener('ended', () => {
-      // Immediately keep MediaSession marked as 'playing' during track transition
-      // so the vehicle OS does not reclaim audio focus for FM/AM radio
-      this.isTransitioningTrack = true;
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'playing';
-      }
-      if (this.onTrackEndCallback) {
-        this.onTrackEndCallback();
+    this.audio.addEventListener('play', () => {
+      this.enforceTeslaExclusiveMediaSessionPlaying();
+      if (this.onStateChangeCallback) {
+        this.onStateChangeCallback(true);
       }
     });
 
-    this.audio.addEventListener('play', () => {
-      this.isTransitioningTrack = false;
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'playing';
-      }
+    this.audio.addEventListener('playing', () => {
+      this.enforceTeslaExclusiveMediaSessionPlaying();
       if (this.onStateChangeCallback) {
         this.onStateChangeCallback(true);
       }
     });
 
     this.audio.addEventListener('pause', () => {
-      // Do not broadcast 'paused' to OS if we are simply swapping the blob URL for the next track
-      if (this.isTransitioningTrack) return;
       if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'paused';
+        try {
+          navigator.mediaSession.playbackState = 'paused';
+        } catch {
+          // ignore
+        }
       }
       if (this.onStateChangeCallback) {
         this.onStateChangeCallback(false);
       }
     });
 
+    this.audio.addEventListener('ended', () => {
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'paused';
+        } catch {
+          // ignore
+        }
+      }
+      if (this.onTrackEndCallback) {
+        this.onTrackEndCallback();
+      }
+    });
+
     this.audio.addEventListener('stalled', () => {
-      // Attempt automatic recovery if audio buffer stalls mid-track
       if (!this.audio.paused && this.audio.src) {
         this.audio.play().catch(() => {});
       }
@@ -273,21 +292,23 @@ export class AudioEngine {
       navigator.mediaSession.setActionHandler('play', () => {
         this.stopAllOtherAudioSources();
         this.startAudioFocusKeepAlive();
-        this.audio.play().catch(() => {});
+        this.audio.play().then(() => {
+          this.enforceTeslaExclusiveMediaSessionPlaying();
+        }).catch(() => {});
       });
 
       navigator.mediaSession.setActionHandler('pause', () => {
-        this.isTransitioningTrack = false;
         this.audio.pause();
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
       });
 
       navigator.mediaSession.setActionHandler('previoustrack', () => {
-        this.isTransitioningTrack = true;
         if (this.onPrevTrackCallback) this.onPrevTrackCallback();
       });
 
       navigator.mediaSession.setActionHandler('nexttrack', () => {
-        this.isTransitioningTrack = true;
         if (this.onNextTrackCallback) this.onNextTrackCallback();
       });
 
@@ -319,41 +340,84 @@ export class AudioEngine {
     if (this.trebleFilter) this.trebleFilter.gain.value = settings.eqBands.treble;
   }
 
-  private async getTrackBlobUrl(track: Track, token: string | null): Promise<string> {
+  private async resolveTrackBlob(
+    track: Track,
+    token: string | null,
+    signal?: AbortSignal,
+    cacheOnly = false
+  ): Promise<{ blobUrl: string; fromCache: boolean } | null> {
     let blob = await AudioCacheDB.getBlob(track.id);
-    if (!blob) {
-      blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token);
-      await AudioCacheDB.saveBlob(track.id, blob);
+    if (blob) {
+      return { blobUrl: URL.createObjectURL(blob), fromCache: true };
     }
-    return URL.createObjectURL(blob);
+    if (cacheOnly || !token) {
+      return null;
+    }
+    blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token, signal);
+    if (signal?.aborted) {
+      throw new DOMException('Track download aborted', 'AbortError');
+    }
+    await AudioCacheDB.saveBlob(track.id, blob);
+    return { blobUrl: URL.createObjectURL(blob), fromCache: false };
   }
 
-  public async playTrack(track: Track, token: string | null, settings: AudioSettings): Promise<void> {
-    this.isTransitioningTrack = true;
+  /**
+   * Anti-overlapping track playback with atomic requestId and AbortController.
+   * Ensures only ONE track ever loads or plays, even if the user taps 10 tracks rapidly.
+   */
+  public async playTrack(
+    track: Track,
+    token: string | null,
+    settings: AudioSettings,
+    initialSeekTime = 0
+  ): Promise<{ isOffline: boolean }> {
+    const requestId = ++this.playRequestId;
+
+    // 1. Abort any previous in-flight Drive download immediately
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+    }
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
+
+    // 2. Immediately pause current audio and reset time to 0 so previous track never overlaps
     this.stopAllOtherAudioSources();
+    this.audio.pause();
+    this.audio.currentTime = 0;
+
+    this.activeTrack = track;
     this.acquireWakeLock();
 
     this.initWebAudio();
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      await this.audioCtx.resume();
+      this.audioCtx.resume().catch(() => {});
     }
     this.startAudioFocusKeepAlive();
 
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'playing';
-    }
+    // Update MediaSession metadata immediately for Tesla OS display
     this.updateMediaSessionMetadata(track);
+    this.registerExclusiveMediaSessionHandlers();
 
     try {
-      // Fetch/resolve the next track's Blob URL BEFORE pausing or swapping src
-      // so there is zero dead air gap that could trigger vehicle FM radio fallback
-      const blobUrl = await this.getTrackBlobUrl(track, token);
+      const resolved = await this.resolveTrackBlob(track, token, abortController.signal, false);
+
+      // 3. Atomic guard: if another track was requested while this blob was loading, discard it
+      if (requestId !== this.playRequestId || abortController.signal.aborted || !resolved) {
+        if (resolved?.blobUrl) {
+          URL.revokeObjectURL(resolved.blobUrl);
+        }
+        return { isOffline: false };
+      }
 
       const previousBlobUrl = this.currentBlobUrl;
-      this.currentBlobUrl = blobUrl;
+      this.currentBlobUrl = resolved.blobUrl;
 
-      this.audio.src = blobUrl;
-      this.audio.currentTime = 0;
+      this.audio.src = resolved.blobUrl;
+      if (initialSeekTime > 0) {
+        this.audio.currentTime = initialSeekTime;
+      } else {
+        this.audio.currentTime = 0;
+      }
 
       if (this.gainNode && this.audioCtx) {
         if (settings.crossfadeSeconds > 0) {
@@ -366,40 +430,197 @@ export class AudioEngine {
       }
 
       await this.audio.play();
-      this.isTransitioningTrack = false;
 
-      if (previousBlobUrl) {
+      // Re-verify atomic request ID after async play() resolves
+      if (requestId !== this.playRequestId) {
+        this.audio.pause();
+        return { isOffline: resolved.fromCache };
+      }
+
+      if (previousBlobUrl && previousBlobUrl !== resolved.blobUrl) {
         URL.revokeObjectURL(previousBlobUrl);
       }
 
-      this.registerExclusiveMediaSessionHandlers();
+      this.enforceTeslaExclusiveMediaSessionPlaying();
       this.startPositionStateTracker();
-    } catch (err) {
-      this.isTransitioningTrack = false;
+      return { isOffline: resolved.fromCache };
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || requestId !== this.playRequestId) {
+        return { isOffline: false };
+      }
       console.error('Playback error:', err);
       throw err;
     }
   }
 
+  /**
+   * Restores a saved track session (from IndexedDB immediately or from network when token is ready)
+   * at the exact saved second `seekTime`, and attempts automatic playback if `wasPlaying === true`.
+   */
+  public async restoreTrackFromSession(
+    track: Track,
+    seekTime: number,
+    wasPlaying: boolean,
+    token: string | null,
+    settings: AudioSettings,
+    cacheOnly = false
+  ): Promise<{ restored: boolean; playing: boolean; autoplayBlocked: boolean; isOffline: boolean }> {
+    const requestId = ++this.playRequestId;
+
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+    }
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
+
+    this.stopAllOtherAudioSources();
+    this.audio.pause();
+
+    this.activeTrack = track;
+    this.updateMediaSessionMetadata(track);
+    this.registerExclusiveMediaSessionHandlers();
+
+    try {
+      const resolved = await this.resolveTrackBlob(track, token, abortController.signal, cacheOnly);
+      if (!resolved) {
+        return { restored: false, playing: false, autoplayBlocked: false, isOffline: false };
+      }
+
+      if (requestId !== this.playRequestId || abortController.signal.aborted) {
+        URL.revokeObjectURL(resolved.blobUrl);
+        return { restored: false, playing: false, autoplayBlocked: false, isOffline: resolved.fromCache };
+      }
+
+      const previousBlobUrl = this.currentBlobUrl;
+      this.currentBlobUrl = resolved.blobUrl;
+      this.audio.src = resolved.blobUrl;
+
+      // Apply exact saved second as soon as metadata loads or immediately
+      const applySavedTime = () => {
+        if (seekTime > 0 && (!this.audio.duration || seekTime < this.audio.duration)) {
+          try {
+            this.audio.currentTime = seekTime;
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      if (this.audio.readyState >= 1) {
+        applySavedTime();
+      } else {
+        this.audio.addEventListener('loadedmetadata', applySavedTime, { once: true });
+      }
+
+      if (previousBlobUrl && previousBlobUrl !== resolved.blobUrl) {
+        URL.revokeObjectURL(previousBlobUrl);
+      }
+
+      if (!wasPlaying) {
+        return { restored: true, playing: false, autoplayBlocked: false, isOffline: resolved.fromCache };
+      }
+
+      // Attempt automatic playback
+      try {
+        this.initWebAudio();
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          await this.audioCtx.resume().catch(() => {});
+        }
+        applySavedTime();
+        await this.audio.play();
+
+        if (requestId !== this.playRequestId) {
+          this.audio.pause();
+          return { restored: true, playing: false, autoplayBlocked: false, isOffline: resolved.fromCache };
+        }
+
+        if (this.gainNode) {
+          this.gainNode.gain.value = 1;
+        }
+        this.startAudioFocusKeepAlive();
+        this.enforceTeslaExclusiveMediaSessionPlaying();
+        this.startPositionStateTracker();
+        return { restored: true, playing: true, autoplayBlocked: false, isOffline: resolved.fromCache };
+      } catch (playErr: any) {
+        // Chromium blocked autoplay without user interaction (NotAllowedError)
+        console.warn('Autoplay blocked by browser policy, awaiting user gesture:', playErr?.name);
+        return { restored: true, playing: false, autoplayBlocked: true, isOffline: resolved.fromCache };
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        return { restored: false, playing: false, autoplayBlocked: false, isOffline: false };
+      }
+      console.warn('Session track restore deferred:', err);
+      return { restored: false, playing: false, autoplayBlocked: false, isOffline: false };
+    }
+  }
+
+  /**
+   * Resumes a pre-loaded session track immediately upon the user's first touch/click.
+   */
+  public async resumeRestoredSession(
+    track: Track,
+    seekTime: number,
+    token: string | null,
+    settings: AudioSettings
+  ): Promise<boolean> {
+    this.stopAllOtherAudioSources();
+    this.initWebAudio();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      await this.audioCtx.resume().catch(() => {});
+    }
+    this.startAudioFocusKeepAlive();
+
+    if (this.audio.src && this.activeTrack?.id === track.id) {
+      try {
+        if (seekTime > 0 && Math.abs(this.audio.currentTime - seekTime) > 2) {
+          this.audio.currentTime = seekTime;
+        }
+        await this.audio.play();
+        this.enforceTeslaExclusiveMediaSessionPlaying();
+        this.startPositionStateTracker();
+        return true;
+      } catch {
+        // Fall through to full playTrack
+      }
+    }
+
+    await this.playTrack(track, token, settings, seekTime);
+    return true;
+  }
+
   public togglePlayPause(): boolean {
     this.stopAllOtherAudioSources();
     if (this.audio.paused) {
+      this.initWebAudio();
       this.startAudioFocusKeepAlive();
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
         this.audioCtx.resume().catch(() => {});
       }
-      this.audio.play().catch(() => {});
+      this.audio.play().then(() => {
+        this.enforceTeslaExclusiveMediaSessionPlaying();
+      }).catch(() => {});
       return true;
     } else {
-      this.isTransitioningTrack = false;
       this.audio.pause();
       this.stopAudioFocusKeepAlive();
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'paused';
+        } catch {
+          // ignore
+        }
+      }
       return false;
     }
   }
 
   public stopAndCleanup() {
-    this.isTransitioningTrack = false;
+    this.playRequestId++;
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
     this.stopAudioFocusKeepAlive();
     this.audio.pause();
     this.audio.removeAttribute('src');
@@ -407,6 +628,13 @@ export class AudioEngine {
     if (this.currentBlobUrl) {
       URL.revokeObjectURL(this.currentBlobUrl);
       this.currentBlobUrl = null;
+    }
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = 'none';
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -416,11 +644,16 @@ export class AudioEngine {
     }
   }
 
+  public getCurrentTime(): number {
+    return this.audio.currentTime || 0;
+  }
+
   public setVolume(vol: number) {
     this.audio.volume = vol;
   }
 
   public async prewarmNextTracks(tracks: Track[], currentIndex: number, token: string | null, count = 2) {
+    if (!token || tracks.length === 0) return;
     const limit = Math.max(1, Math.min(count, 3));
     for (let i = 1; i <= limit; i++) {
       const nextTrack = tracks[(currentIndex + i) % tracks.length];
@@ -440,18 +673,22 @@ export class AudioEngine {
 
   private updateMediaSessionMetadata(track: Track) {
     if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.name,
-        artist: track.artist || 'Google Drive Music',
-        album: track.album || 'AudioCar Drive',
-        artwork: [
-          {
-            src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&h=512&fit=crop',
-            sizes: '512x512',
-            type: 'image/jpeg'
-          }
-        ]
-      });
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.name,
+          artist: track.artist || 'Google Drive Music',
+          album: track.album || 'AudioCar Drive',
+          artwork: [
+            {
+              src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&h=512&fit=crop',
+              sizes: '512x512',
+              type: 'image/jpeg'
+            }
+          ]
+        });
+      } catch {
+        // ignore
+      }
     }
   }
 

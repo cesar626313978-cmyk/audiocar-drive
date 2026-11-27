@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Track, PlaylistFolder, AudioSettings, PlaybackState } from './types/audio';
 import { GoogleDriveAuth, GoogleDriveService } from './services/drive';
 import { TeslaFleetService } from './services/tesla';
@@ -12,12 +12,37 @@ import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
+const DRIVE_SESSION_KEY = 'audiocar_drive_session_v1';
+const THEME_STORAGE_KEY = 'audiocar_theme';
+
+interface PersistedDriveSession {
+  folderId: string;
+  folderName: string;
+  playlist: Array<{
+    id: string;
+    name: string;
+    artist?: string;
+    album?: string;
+    duration?: number;
+    mimeType?: string;
+    downloadUrl?: string;
+    parentId?: string;
+  }>;
+  currentTrackId: string | null;
+  currentTime: number;
+  wasPlaying: boolean;
+}
+
 export default function App() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === 'light' || saved === 'dark' ? saved : 'dark';
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userPicture, setUserPicture] = useState<string | null>(null);
+  const [activeFolderId, setActiveFolderId] = useState<string>('root-empty');
   const [folderName, setFolderName] = useState<string>('mimusica (Drive)');
   const [library, setLibrary] = useState<PlaylistFolder>({
     id: 'root-empty',
@@ -56,6 +81,11 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
 
+  // Resume session state when Chromium blocks autoplay on startup
+  const [showResumeOverlay, setShowResumeOverlay] = useState<boolean>(false);
+  const [savedResumeTime, setSavedResumeTime] = useState<number>(0);
+  const pendingNetworkSessionRef = useRef<PersistedDriveSession | null>(null);
+
   // Dual view switcher for screens < 1100px (Tesla Drive Split-Screen)
   const [mobileView, setMobileView] = useState<'player' | 'library'>('library');
 
@@ -63,14 +93,79 @@ export default function App() {
   const [hasTeslaSession, setHasTeslaSession] = useState<boolean>(false);
   const [teslaShiftState, setTeslaShiftState] = useState<string | null>(null);
   const isReverseDimmedRef = useRef<boolean>(false);
+
+  // Atomic playRequestIdRef to prevent UI/Audio desynchronization on rapid skips
+  const playRequestIdRef = useRef<number>(0);
   const nextTrackRef = useRef<() => void>(() => {});
   const prevTrackRef = useRef<() => void>(() => {});
+  const playbackStateRef = useRef<PlaybackState>(playbackState);
+  const activeFolderRef = useRef<{ id: string; name: string }>({ id: activeFolderId, name: folderName });
 
-  // Initialize single exclusive audio engine, MediaSession, and hide any external Hub mini-player on mount
+  useEffect(() => {
+    playbackStateRef.current = playbackState;
+  }, [playbackState]);
+
+  useEffect(() => {
+    activeFolderRef.current = { id: activeFolderId, name: folderName };
+  }, [activeFolderId, folderName]);
+
+  // Save session snapshot to localStorage ('audiocar_drive_session_v1')
+  const persistDriveSession = useCallback(
+    (override?: Partial<{ wasPlaying: boolean; currentTime: number; track: Track | null; queue: Track[] }>) => {
+      const state = playbackStateRef.current;
+      const track = override?.track !== undefined ? override.track : state.currentTrack;
+      const queue = override?.queue !== undefined ? override.queue : state.queue;
+      if (!track && queue.length === 0) return;
+
+      const currentTime =
+        override?.currentTime !== undefined
+          ? override.currentTime
+          : audioEngine.getCurrentTime() || state.currentTime || 0;
+      const wasPlaying =
+        override?.wasPlaying !== undefined ? override.wasPlaying : state.isPlaying;
+
+      const lightPlaylist = queue.slice(0, 300).map((t) => ({
+        id: t.id,
+        name: t.name,
+        artist: t.artist,
+        album: t.album,
+        duration: t.duration,
+        mimeType: t.mimeType || 'audio/mpeg',
+        downloadUrl: t.downloadUrl || `https://www.googleapis.com/drive/v3/files/${t.id}?alt=media`,
+        parentId: t.parentId
+      }));
+
+      const payload: PersistedDriveSession = {
+        folderId: activeFolderRef.current.id,
+        folderName: activeFolderRef.current.name,
+        playlist: lightPlaylist,
+        currentTrackId: track?.id || null,
+        currentTime: Math.floor(currentTime),
+        wasPlaying
+      };
+
+      try {
+        localStorage.setItem(DRIVE_SESSION_KEY, JSON.stringify(payload));
+      } catch (e) {
+        console.warn('Could not persist session to localStorage:', e);
+      }
+    },
+    []
+  );
+
+  // Save session every 5 seconds while playing
+  useEffect(() => {
+    if (!playbackState.isPlaying || !playbackState.currentTrack) return;
+    const interval = setInterval(() => {
+      persistDriveSession({ wasPlaying: true });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [playbackState.isPlaying, playbackState.currentTrack, persistDriveSession]);
+
+  // Initialize single exclusive audio engine, MediaSession, and instant IndexedDB session restore on mount
   useEffect(() => {
     audioEngine.stopAllOtherAudioSources();
 
-    // Hide any persistent mini-player inherited from parent Hub layout if present in DOM
     try {
       const externalPlayers = document.querySelectorAll(
         '#hub-mini-player, .hub-mini-player, [data-hub-player], footer:not([data-player="audiocar-drive-single-footer"])'
@@ -84,13 +179,20 @@ export default function App() {
 
     audioEngine.setCallbacks(
       (time, duration) => {
-        setPlaybackState(prev => ({ ...prev, currentTime: time, duration: duration || prev.duration }));
+        setPlaybackState((prev) => ({
+          ...prev,
+          currentTime: time,
+          duration: duration || prev.duration
+        }));
       },
       () => {
         nextTrackRef.current();
       },
       (isPlaying) => {
-        setPlaybackState(prev => ({ ...prev, isPlaying }));
+        setPlaybackState((prev) => ({ ...prev, isPlaying }));
+        if (isPlaying) {
+          setShowResumeOverlay(false);
+        }
       },
       () => {
         prevTrackRef.current();
@@ -103,10 +205,13 @@ export default function App() {
     audioEngine.updateSettings(settings);
     AudioCacheDB.getCacheSizeMB().then(setCacheSize);
 
-    // Attempt autoconnection / silent renewal for Google Drive
+    // 1. Instant local session & IndexedDB restoration (zero network wait)
+    restorePersistedSessionImmediately();
+
+    // 2. Autoconnect / silent renewal via audiocar_user_hint
     checkAndRestoreSession();
 
-    // Check shared Tesla Fleet API session in localStorage ('audiocar_tesla_session')
+    // 3. Check shared Tesla Fleet API session in localStorage ('audiocar_tesla_session')
     const checkTeslaSession = () => {
       const session = TeslaFleetService.getSession();
       setHasTeslaSession(Boolean(session && session.access_token));
@@ -115,6 +220,124 @@ export default function App() {
     window.addEventListener('storage', checkTeslaSession);
     return () => window.removeEventListener('storage', checkTeslaSession);
   }, []);
+
+  const restorePersistedSessionImmediately = async () => {
+    try {
+      const raw = localStorage.getItem(DRIVE_SESSION_KEY);
+      if (!raw) return;
+      const saved: PersistedDriveSession = JSON.parse(raw);
+      if (!saved || !Array.isArray(saved.playlist) || saved.playlist.length === 0) return;
+
+      const restoredQueue: Track[] = saved.playlist.map((item) => ({
+        id: item.id,
+        name: item.name,
+        artist: item.artist || saved.folderName || 'Google Drive',
+        album: item.album || saved.folderName || 'mimusica',
+        duration: item.duration,
+        mimeType: item.mimeType || 'audio/mpeg',
+        downloadUrl: item.downloadUrl || `https://www.googleapis.com/drive/v3/files/${item.id}?alt=media`,
+        parentId: item.parentId || saved.folderId
+      }));
+
+      const targetIndex = saved.currentTrackId
+        ? Math.max(0, restoredQueue.findIndex((t) => t.id === saved.currentTrackId))
+        : 0;
+      const targetTrack = restoredQueue[targetIndex] || restoredQueue[0];
+
+      if (saved.folderId) setActiveFolderId(saved.folderId);
+      if (saved.folderName) setFolderName(saved.folderName);
+
+      // Populate temporary library view from saved playlist immediately so user sees tracks right away
+      setLibrary((prev) =>
+        prev.tracks.length === 0 && (!prev.subfolders || prev.subfolders.length === 0)
+          ? {
+              id: saved.folderId || 'restored-folder',
+              name: saved.folderName || 'mimusica',
+              tracks: restoredQueue
+            }
+          : prev
+      );
+
+      setPlaybackState((prev) => ({
+        ...prev,
+        currentTrack: targetTrack,
+        queue: restoredQueue,
+        queueIndex: targetIndex,
+        currentTime: saved.currentTime || 0
+      }));
+      setSavedResumeTime(saved.currentTime || 0);
+
+      if (saved.wasPlaying) {
+        setMobileView('player');
+      }
+
+      // Attempt immediate playback from IndexedDB (even before network token arrives)
+      const storedToken = GoogleDriveAuth.getStoredToken();
+      const result = await audioEngine.restoreTrackFromSession(
+        targetTrack,
+        saved.currentTime || 0,
+        saved.wasPlaying,
+        storedToken,
+        settings,
+        !storedToken
+      );
+
+      if (result.restored) {
+        setPlaybackState((prev) => ({
+          ...prev,
+          isPlaying: result.playing,
+          isOffline: result.isOffline,
+          currentTime: saved.currentTime || 0
+        }));
+        if (saved.wasPlaying && (result.autoplayBlocked || !result.playing)) {
+          setShowResumeOverlay(true);
+        }
+      } else {
+        // Track was not in IndexedDB and token wasn't ready yet; defer until silentRefresh completes
+        pendingNetworkSessionRef.current = saved;
+        if (saved.wasPlaying) {
+          setShowResumeOverlay(true);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved drive session:', e);
+    }
+  };
+
+  // Global first-touch listener to resume playback when showResumeOverlay is active
+  const handleResumeNow = useCallback(async () => {
+    const state = playbackStateRef.current;
+    if (!state.currentTrack) return;
+
+    setShowResumeOverlay(false);
+    const activeTok = token || GoogleDriveAuth.getStoredToken();
+    const resumeSec = savedResumeTime || state.currentTime || 0;
+
+    try {
+      await audioEngine.resumeRestoredSession(state.currentTrack, resumeSec, activeTok, settings);
+      setPlaybackState((prev) => ({ ...prev, isPlaying: true }));
+    } catch (e) {
+      console.warn('Resume session error:', e);
+    }
+  }, [token, savedResumeTime, settings]);
+
+  useEffect(() => {
+    if (!showResumeOverlay || !playbackState.currentTrack) return;
+
+    const handleFirstScreenTouch = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Do not intercept if the user tapped a specific interactive button/input (like Folder list or Settings)
+      if (target && target.closest('button, input, a, [data-no-autostart]')) {
+        return;
+      }
+      handleResumeNow();
+    };
+
+    window.addEventListener('pointerdown', handleFirstScreenTouch, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstScreenTouch);
+    };
+  }, [showResumeOverlay, playbackState.currentTrack, handleResumeNow]);
 
   // Poll Tesla drive_state every 4 seconds when autoDimOnReverse is enabled and Tesla session exists
   useEffect(() => {
@@ -142,7 +365,10 @@ export default function App() {
 
   const checkAndRestoreSession = async () => {
     let activeToken = GoogleDriveAuth.getStoredToken();
-    if (!activeToken) {
+    const userHint = GoogleDriveAuth.getUserHint();
+
+    // If token is missing/expired but audiocar_user_hint or clientId exists, trigger silent refresh in background
+    if (!activeToken && (userHint || GoogleDriveAuth.getStoredClientId())) {
       activeToken = await GoogleDriveAuth.silentRefresh();
     }
 
@@ -151,10 +377,31 @@ export default function App() {
       setIsAuthenticated(true);
       setUserEmail(GoogleDriveAuth.getStoredEmail());
       setUserPicture(GoogleDriveAuth.getStoredPicture());
+
+      // If we had a pending session track that wasn't cached in IndexedDB, restore it now from network
+      if (pendingNetworkSessionRef.current && playbackStateRef.current.currentTrack) {
+        const pending = pendingNetworkSessionRef.current;
+        pendingNetworkSessionRef.current = null;
+        const res = await audioEngine.restoreTrackFromSession(
+          playbackStateRef.current.currentTrack,
+          pending.currentTime || 0,
+          pending.wasPlaying,
+          activeToken,
+          settings,
+          false
+        );
+        if (res.playing) {
+          setPlaybackState((prev) => ({ ...prev, isPlaying: true, isOffline: res.isOffline }));
+          setShowResumeOverlay(false);
+        } else if (pending.wasPlaying) {
+          setShowResumeOverlay(true);
+        }
+      }
+
       initMimusicaLibrary(activeToken);
     } else {
       const clientId = GoogleDriveAuth.getStoredClientId();
-      if (!clientId) {
+      if (!clientId && !userHint) {
         setIsLoginOpen(true);
       }
     }
@@ -167,7 +414,7 @@ export default function App() {
       const folderId = await GoogleDriveService.findMimusicaFolder(authToken);
       const fetchedLib = await GoogleDriveService.fetchMimusicaLibrary(authToken, folderId);
       setLibrary(fetchedLib);
-      
+
       const all: Track[] = [];
       const collect = (f: PlaylistFolder) => {
         all.push(...f.tracks);
@@ -176,7 +423,10 @@ export default function App() {
       collect(fetchedLib);
 
       if (all.length > 0) {
-        setPlaybackState(prev => ({ ...prev, queue: all }));
+        setPlaybackState((prev) => ({
+          ...prev,
+          queue: prev.queue.length > 0 ? prev.queue : all
+        }));
       }
     } catch (e: any) {
       console.error('Failed to load Google Drive library:', e);
@@ -232,7 +482,10 @@ export default function App() {
           initMimusicaLibrary(resp.access_token);
         }
       }, promptValue);
-      tokenClient.requestAccessToken({ prompt: promptValue || '' });
+      tokenClient.requestAccessToken({
+        prompt: promptValue !== undefined ? promptValue : '',
+        hint: GoogleDriveAuth.getUserHint() || undefined
+      });
     } catch (e) {
       console.error('Failed to initialize Google token client:', e);
     }
@@ -248,26 +501,44 @@ export default function App() {
   };
 
   const handleSelectTrack = async (track: Track, queueList: Track[], enableShuffle?: boolean) => {
-    const index = queueList.findIndex(t => t.id === track.id);
-    setPlaybackState(prev => ({
+    const reqId = ++playRequestIdRef.current;
+    setShowResumeOverlay(false);
+
+    const index = queueList.findIndex((t) => t.id === track.id);
+    const resolvedIndex = index >= 0 ? index : 0;
+
+    setPlaybackState((prev) => ({
       ...prev,
       currentTrack: track,
       queue: queueList,
-      queueIndex: index >= 0 ? index : 0,
+      queueIndex: resolvedIndex,
+      currentTime: 0,
+      isPlaying: true,
       shuffle: enableShuffle !== undefined ? enableShuffle : prev.shuffle
     }));
 
-    if (!token) return;
+    persistDriveSession({
+      track,
+      queue: queueList,
+      currentTime: 0,
+      wasPlaying: true
+    });
+
+    const activeTok = token || GoogleDriveAuth.getStoredToken();
 
     try {
-      await audioEngine.playTrack(track, token, settings);
-      setPlaybackState(prev => ({ ...prev, isPlaying: true }));
-      audioEngine.prewarmNextTracks(queueList, index >= 0 ? index : 0, token, settings.bufferAheadCount);
+      const { isOffline } = await audioEngine.playTrack(track, activeTok, settings);
+      if (reqId !== playRequestIdRef.current) return;
+
+      setPlaybackState((prev) => ({ ...prev, isPlaying: true, isOffline }));
+      audioEngine.prewarmNextTracks(queueList, resolvedIndex, activeTok, settings.bufferAheadCount);
     } catch (e: any) {
+      if (reqId !== playRequestIdRef.current) return;
       if (e.message === 'UNAUTHORIZED') {
         const fresh = await GoogleDriveAuth.silentRefresh();
         if (fresh) {
           setToken(fresh);
+          setIsAuthenticated(true);
           handleSelectTrack(track, queueList, enableShuffle);
         } else {
           setIsAuthenticated(false);
@@ -275,11 +546,17 @@ export default function App() {
         }
       } else {
         console.error('Play track error:', e);
+        setPlaybackState((prev) => ({ ...prev, isPlaying: false }));
       }
     }
   };
 
   const handleTogglePlay = async () => {
+    if (showResumeOverlay && playbackState.currentTrack) {
+      await handleResumeNow();
+      return;
+    }
+
     if (!playbackState.currentTrack && playbackState.queue.length > 0) {
       await handleSelectTrack(playbackState.queue[0], playbackState.queue);
       if (hasTeslaSession) {
@@ -287,8 +564,11 @@ export default function App() {
       }
       return;
     }
+
     const playing = audioEngine.togglePlayPause();
-    setPlaybackState(prev => ({ ...prev, isPlaying: playing }));
+    setPlaybackState((prev) => ({ ...prev, isPlaying: playing }));
+    persistDriveSession({ wasPlaying: playing });
+
     if (hasTeslaSession) {
       TeslaFleetService.sendCommand('media_toggle_playback');
     }
@@ -303,7 +583,7 @@ export default function App() {
   };
 
   const handleNextTrack = async () => {
-    const { queue, queueIndex, repeatMode, shuffle } = playbackState;
+    const { queue, queueIndex, repeatMode, shuffle } = playbackStateRef.current;
     if (queue.length === 0) return;
 
     let nextIndex = queueIndex + 1;
@@ -313,16 +593,36 @@ export default function App() {
       if (repeatMode === 'all') {
         nextIndex = 0;
       } else {
+        setPlaybackState((prev) => ({ ...prev, isPlaying: false }));
+        persistDriveSession({ wasPlaying: false });
         return;
       }
     }
 
     const nextTrack = queue[nextIndex];
     if (nextTrack) {
-      setPlaybackState(prev => ({ ...prev, currentTrack: nextTrack, queueIndex: nextIndex }));
+      const reqId = ++playRequestIdRef.current;
+      setShowResumeOverlay(false);
+      setPlaybackState((prev) => ({
+        ...prev,
+        currentTrack: nextTrack,
+        queueIndex: nextIndex,
+        currentTime: 0,
+        isPlaying: true
+      }));
+      persistDriveSession({
+        track: nextTrack,
+        queue,
+        currentTime: 0,
+        wasPlaying: true
+      });
+
+      const activeTok = token || GoogleDriveAuth.getStoredToken();
       try {
-        await audioEngine.playTrack(nextTrack, token, settings);
-        audioEngine.prewarmNextTracks(queue, nextIndex, token, settings.bufferAheadCount);
+        const { isOffline } = await audioEngine.playTrack(nextTrack, activeTok, settings);
+        if (reqId !== playRequestIdRef.current) return;
+        setPlaybackState((prev) => ({ ...prev, isPlaying: true, isOffline }));
+        audioEngine.prewarmNextTracks(queue, nextIndex, activeTok, settings.bufferAheadCount);
       } catch (e) {
         console.error('Next track error:', e);
       }
@@ -330,7 +630,7 @@ export default function App() {
   };
 
   const handlePrevTrack = async () => {
-    const { queue, queueIndex } = playbackState;
+    const { queue, queueIndex } = playbackStateRef.current;
     if (queue.length === 0) return;
 
     let prevIndex = queueIndex - 1;
@@ -338,9 +638,27 @@ export default function App() {
 
     const prevTrack = queue[prevIndex];
     if (prevTrack) {
-      setPlaybackState(prev => ({ ...prev, currentTrack: prevTrack, queueIndex: prevIndex }));
+      const reqId = ++playRequestIdRef.current;
+      setShowResumeOverlay(false);
+      setPlaybackState((prev) => ({
+        ...prev,
+        currentTrack: prevTrack,
+        queueIndex: prevIndex,
+        currentTime: 0,
+        isPlaying: true
+      }));
+      persistDriveSession({
+        track: prevTrack,
+        queue,
+        currentTime: 0,
+        wasPlaying: true
+      });
+
+      const activeTok = token || GoogleDriveAuth.getStoredToken();
       try {
-        await audioEngine.playTrack(prevTrack, token, settings);
+        const { isOffline } = await audioEngine.playTrack(prevTrack, activeTok, settings);
+        if (reqId !== playRequestIdRef.current) return;
+        setPlaybackState((prev) => ({ ...prev, isPlaying: true, isOffline }));
       } catch (e) {
         console.error('Prev track error:', e);
       }
@@ -352,20 +670,22 @@ export default function App() {
 
   const handleSeek = (time: number) => {
     audioEngine.seek(time);
-    setPlaybackState(prev => ({ ...prev, currentTime: time }));
+    setPlaybackState((prev) => ({ ...prev, currentTime: time }));
+    persistDriveSession({ currentTime: time });
   };
 
   const handleVolumeChange = (vol: number) => {
     audioEngine.setVolume(vol);
-    setPlaybackState(prev => ({ ...prev, volume: vol }));
+    setPlaybackState((prev) => ({ ...prev, volume: vol }));
   };
 
   const handleDownloadTrack = async (track: Track) => {
-    if (!token) return;
+    const activeTok = token || GoogleDriveAuth.getStoredToken();
+    if (!activeTok) return;
     try {
-      const blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, token);
+      const blob = await GoogleDriveService.fetchAudioBlobWithRetry(track, activeTok);
       await AudioCacheDB.saveBlob(track.id, blob);
-      setDownloadedTrackIds(prev => new Set(prev).add(track.id));
+      setDownloadedTrackIds((prev) => new Set(prev).add(track.id));
       const size = await AudioCacheDB.getCacheSizeMB();
       setCacheSize(size);
     } catch (e) {
@@ -382,10 +702,11 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   const handleToggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   return (
@@ -403,7 +724,7 @@ export default function App() {
         userEmail={userEmail}
         userPicture={userPicture}
         mobileView={mobileView}
-        onToggleMobileView={() => setMobileView(prev => (prev === 'player' ? 'library' : 'player'))}
+        onToggleMobileView={() => setMobileView((prev) => (prev === 'player' ? 'library' : 'player'))}
         onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLogin={() => {
@@ -423,7 +744,8 @@ export default function App() {
           setUserEmail(null);
           setUserPicture(null);
           setLibrary({ id: 'empty', name: 'mimusica', tracks: [] });
-          setPlaybackState(prev => ({ ...prev, queue: [], currentTrack: null, isPlaying: false }));
+          setPlaybackState((prev) => ({ ...prev, queue: [], currentTrack: null, isPlaying: false }));
+          setShowResumeOverlay(false);
         }}
         cacheSize={cacheSize}
       />
@@ -464,6 +786,11 @@ export default function App() {
             currentTrack={playbackState.currentTrack}
             isPlaying={playbackState.isPlaying}
             shuffle={playbackState.shuffle}
+            selectedFolderId={activeFolderId}
+            onFolderChange={(fId, fName) => {
+              setActiveFolderId(fId);
+              setFolderName(fName === 'mimusica' ? 'mimusica (Drive)' : fName);
+            }}
             onSelectTrack={(track, list, enableShuffle) => {
               handleSelectTrack(track, list, enableShuffle);
             }}
@@ -473,7 +800,7 @@ export default function App() {
           />
         </div>
 
-        {/* Right Column: Player Panel (Artwork & Visualizer only, zero duplicate controls) */}
+        {/* Right Column: Player Panel (Artwork, 56-Bar Visualizer & Autoplay Resume Overlay) */}
         <div
           className={`min-[1100px]:col-span-7 xl:col-span-7 h-full min-h-0 ${
             mobileView === 'player' ? 'block' : 'hidden min-[1100px]:block'
@@ -485,6 +812,9 @@ export default function App() {
             isOffline={playbackState.isOffline}
             hasTeslaSession={hasTeslaSession}
             teslaShiftState={teslaShiftState}
+            showResumeOverlay={showResumeOverlay}
+            resumeTime={savedResumeTime || playbackState.currentTime}
+            onResumeNow={handleResumeNow}
             onOpenFolders={() => setMobileView('library')}
           />
         </div>
@@ -510,10 +840,10 @@ export default function App() {
         onToggleRepeat={() => {
           const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
           const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
-          setPlaybackState(prev => ({ ...prev, repeatMode: next }));
+          setPlaybackState((prev) => ({ ...prev, repeatMode: next }));
         }}
-        onToggleShuffle={() => setPlaybackState(prev => ({ ...prev, shuffle: !prev.shuffle }))}
-        onToggleMobileView={() => setMobileView(prev => (prev === 'player' ? 'library' : 'player'))}
+        onToggleShuffle={() => setPlaybackState((prev) => ({ ...prev, shuffle: !prev.shuffle }))}
+        onToggleMobileView={() => setMobileView((prev) => (prev === 'player' ? 'library' : 'player'))}
         onTeslaVolumeDown={handleTeslaVolumeDown}
         onTeslaVolumeUp={handleTeslaVolumeUp}
       />
