@@ -121,25 +121,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* Responsive view switcher on split-screen (< 1100px) */}
+          {/* Prominent responsive view switcher on split-screen (< 1024px) */}
           <button
             onClick={onToggleMobileView}
-            className={`min-[1100px]:hidden h-[40px] px-3.5 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-all border whitespace-nowrap ${
-              mobileView === 'player'
-                ? 'bg-[#F8FAFC] dark:bg-[#16181C] text-[#0F172A] dark:text-[#F8FAFC] border-[#E2E8F0] dark:border-[#2A2D34] hover:border-[#93C5FD]'
-                : 'bg-[#3B82F6] text-white border-[#3B82F6]'
-            }`}
+            className="lg:hidden h-[42px] px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all border whitespace-nowrap bg-[#3B82F6] hover:bg-blue-500 text-white border-[#3B82F6] shadow-md shadow-[#3B82F6]/25 active:scale-95"
+            title={mobileView === 'player' ? 'Ver Lista de Carpetas y Canciones' : 'Ver Reproductor'}
           >
             {mobileView === 'player' ? (
-              <>
-                <Folder className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
-                <span>Carpetas</span>
-              </>
+              <span>☰ Carpetas / Pistas</span>
             ) : (
-              <>
-                <Music className="w-4 h-4 shrink-0" />
-                <span>Reproductor</span>
-              </>
+              <span>▶ Reproductor</span>
             )}
           </button>
 

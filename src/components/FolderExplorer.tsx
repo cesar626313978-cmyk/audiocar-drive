@@ -232,11 +232,11 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         {onSwitchToPlayer && (
           <button
             onClick={onSwitchToPlayer}
-            className="min-[1100px]:hidden min-h-[42px] px-3.5 py-2 rounded-[12px] bg-[#EFF6FF] hover:bg-blue-100 border border-[#93C5FD] text-[#1D4ED8] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#4DA8FF] text-xs font-bold flex items-center gap-1.5 shrink-0"
+            className="lg:hidden min-h-[42px] px-3.5 py-2 rounded-[12px] bg-[#3B82F6] hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-sm shadow-[#3B82F6]/25 flex items-center gap-1.5 shrink-0 transition-all"
             title="Volver a la vista principal del reproductor"
           >
-            <Disc className="w-4 h-4" />
-            <span>Reproductor</span>
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>▶ Reproductor</span>
           </button>
         )}
       </div>

@@ -83,12 +83,12 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const volumePercent = Math.round((volume || 0) * 100);
 
   return (
-    <div className="flex flex-col justify-between h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] p-4 sm:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-none relative overflow-hidden transition-colors">
+    <div className="flex flex-col justify-between h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] p-3.5 sm:p-4 lg:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-none relative overflow-hidden transition-colors">
       {/* 1. ZONA SUPERIOR DERECHA: Carátula cuadrada redondeada (96x96px) a la izquierda + Metadatos, Título grande y Carpeta/Artista */}
-      <div className="w-full flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 sm:gap-5 min-w-0 flex-1">
+      <div className="w-full flex items-center justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3.5 sm:gap-5 min-w-0 flex-1">
           {/* 96x96px Rounded Square Artwork */}
-          <div className="relative w-24 h-24 [@media(max-height:750px)]:w-20 [@media(max-height:750px)]:h-20 rounded-2xl overflow-hidden bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-md shrink-0 flex items-center justify-center">
+          <div className="relative w-20 h-20 lg:w-24 lg:h-24 [@media(max-height:750px)]:w-20 [@media(max-height:750px)]:h-20 rounded-2xl overflow-hidden bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-md shrink-0 flex items-center justify-center">
             <img
               src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&h=400&fit=crop"
               alt="Carátula"
@@ -133,7 +133,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
               )}
             </div>
 
-            <h2 className="text-lg sm:text-2xl [@media(max-height:750px)]:text-base font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate leading-tight">
+            <h2 className="text-lg sm:text-xl lg:text-2xl [@media(max-height:750px)]:text-base font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate leading-tight">
               {currentTrack?.name || 'Selecciona una pista'}
             </h2>
             <p className="text-xs sm:text-sm font-medium text-[#475569] dark:text-[#94A3B8] truncate mt-0.5">
@@ -145,18 +145,19 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
         {onOpenFolders && (
           <button
             onClick={onOpenFolders}
-            className="min-[1100px]:hidden h-[40px] px-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] dark:border-[#2A2D34] text-[#0F172A] dark:text-[#F8FAFC] text-xs font-semibold flex items-center gap-1.5 shrink-0"
+            className="lg:hidden h-[42px] px-4 rounded-xl bg-[#3B82F6] hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-sm shadow-[#3B82F6]/25 flex items-center gap-1.5 shrink-0 transition-all"
+            title="Ver lista de carpetas y canciones"
           >
-            <Folder className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF]" />
-            <span>Carpetas</span>
+            <Folder className="w-4 h-4" />
+            <span>☰ Carpetas</span>
           </button>
         )}
       </div>
 
       {/* 2. ZONA CENTRAL DERECHA: Visualizador Bicolor + Encabezado Espectro/EQ + Barra de Progreso Interactiva */}
-      <div className="w-full my-auto py-3 [@media(max-height:750px)]:py-1.5 space-y-3.5 [@media(max-height:750px)]:space-y-2 relative">
+      <div className="w-full my-auto py-1.5 lg:py-3 [@media(max-height:750px)]:py-1.5 space-y-2.5 lg:space-y-3.5 [@media(max-height:750px)]:space-y-2 relative">
         {/* Spectrum Box */}
-        <div className="w-full bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-2xl p-3.5 sm:p-4 [@media(max-height:750px)]:p-2.5">
+        <div className="w-full bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-2xl p-2.5 sm:p-3 lg:p-4 [@media(max-height:750px)]:p-2.5">
           <div className="flex items-center justify-between text-xs mb-2">
             <span className="font-semibold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider">
               Espectro de Onda en Tiempo Real
@@ -241,7 +242,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
       </div>
 
       {/* 3. ZONA INFERIOR DERECHA: Botonera Principal Centrada (72x72px Play/Pausa) + Deslizador Horizontal Ancho de Volumen */}
-      <div className="w-full space-y-4 [@media(max-height:750px)]:space-y-2.5">
+      <div className="w-full space-y-2.5 lg:space-y-4 [@media(max-height:750px)]:space-y-2.5">
         {/* Centered Transport Controls Row */}
         <div className="w-full flex items-center justify-center gap-3 sm:gap-5">
           {/* [Aleatorio] Discreet Left */}
@@ -260,7 +261,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
           {/* [Anterior] */}
           <button
             onClick={onPrev}
-            className="w-14 h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
+            className="w-12 h-12 lg:w-14 lg:h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
             title="Anterior"
           >
             <SkipBack className="w-6 h-6" />
@@ -269,7 +270,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
           {/* [Play / Pausa] 72x72px Rounded Square Blue Button */}
           <button
             onClick={onTogglePlay}
-            className="w-[72px] h-[72px] [@media(max-height:750px)]:w-[60px] [@media(max-height:750px)]:h-[60px] rounded-2xl bg-[#3B82F6] hover:bg-blue-500 text-white shadow-lg shadow-[#3B82F6]/30 flex items-center justify-center transition-all active:scale-95"
+            className="w-[62px] h-[62px] lg:w-[72px] lg:h-[72px] [@media(max-height:750px)]:w-[60px] [@media(max-height:750px)]:h-[60px] rounded-2xl bg-[#3B82F6] hover:bg-blue-500 text-white shadow-lg shadow-[#3B82F6]/30 flex items-center justify-center transition-all active:scale-95"
             title={isPlaying ? 'Pausar' : 'Reproducir'}
           >
             {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 ml-0.5 fill-current" />}
@@ -278,7 +279,7 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
           {/* [Siguiente] */}
           <button
             onClick={onNext}
-            className="w-14 h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
+            className="w-12 h-12 lg:w-14 lg:h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
             title="Siguiente"
           >
             <SkipForward className="w-6 h-6" />

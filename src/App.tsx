@@ -710,7 +710,7 @@ export default function App() {
 
   return (
     <div
-      className={`h-screen overflow-hidden flex flex-col transition-colors duration-200 ${
+      className={`h-[100dvh] overflow-hidden flex flex-col transition-colors duration-200 ${
         theme === 'dark'
           ? 'dark bg-[#121316] text-[#F8FAFC]'
           : 'bg-[#F4F6F9] text-[#0F172A]'
@@ -770,11 +770,11 @@ export default function App() {
       )}
 
       {/* Main Responsive Twin-Cabin Grid Layout identical to AudioCar Radio */}
-      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-5 max-w-[1600px] w-full mx-auto">
+      <main className="flex-1 min-h-0 max-h-[calc(100dvh-64px)] p-2.5 sm:p-3 lg:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-5 max-w-[1600px] w-full mx-auto overflow-hidden">
         {/* Left Column: Folder Explorer */}
         <div
-          className={`min-[1100px]:col-span-5 xl:col-span-5 h-full min-h-0 ${
-            mobileView === 'library' ? 'block' : 'hidden min-[1100px]:block'
+          className={`lg:col-span-5 xl:col-span-5 h-full min-h-0 ${
+            mobileView === 'library' ? 'block' : 'hidden lg:block'
           }`}
         >
           <FolderExplorer
@@ -789,6 +789,9 @@ export default function App() {
             }}
             onSelectTrack={(track, list, enableShuffle) => {
               handleSelectTrack(track, list, enableShuffle);
+              if (window.innerWidth < 1024) {
+                setMobileView('player');
+              }
             }}
             onDownloadTrack={handleDownloadTrack}
             downloadedTrackIds={downloadedTrackIds}
@@ -798,8 +801,8 @@ export default function App() {
 
         {/* Right Column: Unified Player Panel identical to AudioCar Radio */}
         <div
-          className={`min-[1100px]:col-span-7 xl:col-span-7 h-full min-h-0 ${
-            mobileView === 'player' ? 'block' : 'hidden min-[1100px]:block'
+          className={`lg:col-span-7 xl:col-span-7 h-full min-h-0 ${
+            mobileView === 'player' ? 'block' : 'hidden lg:block'
           }`}
         >
           <PlayerPanel

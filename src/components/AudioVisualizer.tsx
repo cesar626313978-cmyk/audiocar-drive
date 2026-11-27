@@ -277,7 +277,7 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
   }, [isPlaying]);
 
   return (
-    <div className="w-full h-24 sm:h-28 [@media(max-height:750px)]:h-20 relative flex items-center justify-center">
+    <div className="w-full h-20 lg:h-28 [@media(max-height:700px)]:h-16 relative flex items-center justify-center">
       <canvas
         ref={canvasRef}
         className="w-full h-full block"
