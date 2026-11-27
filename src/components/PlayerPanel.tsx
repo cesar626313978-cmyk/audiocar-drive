@@ -1,29 +1,74 @@
 import React from 'react';
 import { Track } from '../types/audio';
-import { ShieldCheck, Radio, Disc, Folder, Play, Clock } from 'lucide-react';
+import {
+  ShieldCheck,
+  Radio,
+  Disc,
+  Folder,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Shuffle,
+  Repeat,
+  Volume1,
+  Volume2,
+  VolumeX,
+  Clock
+} from 'lucide-react';
 import { AudioVisualizer } from './AudioVisualizer';
 
 interface PlayerPanelProps {
   currentTrack: Track | null;
   isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  repeatMode: 'off' | 'all' | 'one';
+  shuffle: boolean;
   isOffline: boolean;
+  eqBands: { bass: number; mid: number; treble: number };
   hasTeslaSession?: boolean;
   teslaShiftState?: string | null;
   showResumeOverlay?: boolean;
   resumeTime?: number;
   onResumeNow?: () => void;
+  onTogglePlay: () => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onSeek: (time: number) => void;
+  onVolumeChange: (vol: number) => void;
+  onToggleRepeat: () => void;
+  onToggleShuffle: () => void;
+  onTeslaVolumeDown?: () => void;
+  onTeslaVolumeUp?: () => void;
   onOpenFolders?: () => void;
 }
 
 export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   currentTrack,
   isPlaying,
+  currentTime,
+  duration,
+  volume,
+  repeatMode,
+  shuffle,
   isOffline,
+  eqBands,
   hasTeslaSession,
   teslaShiftState,
   showResumeOverlay,
   resumeTime = 0,
   onResumeNow,
+  onTogglePlay,
+  onNext,
+  onPrev,
+  onSeek,
+  onVolumeChange,
+  onToggleRepeat,
+  onToggleShuffle,
+  onTeslaVolumeDown,
+  onTeslaVolumeUp,
   onOpenFolders
 }) => {
   const formatTime = (sec: number) => {
@@ -33,95 +78,129 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const formatEqVal = (val: number) => (val >= 0 ? `+${val}` : `${val}`);
+  const remainingTime = Math.max(0, (duration || 0) - (currentTime || 0));
+  const volumePercent = Math.round((volume || 0) * 100);
+
   return (
-    <div className="flex flex-col items-center justify-between h-full bg-white dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-[#E2E8F0] dark:border-slate-800 p-4 sm:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-2xl relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-blue-500/5 dark:bg-blue-600/10 blur-[120px] rounded-full pointer-events-none"></div>
-
-      {/* Top Header info */}
-      <div className="w-full flex items-center justify-between gap-2 mb-2 relative z-10">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#DCFCE7] border border-[#86EFAC] text-[#15803D] dark:bg-emerald-500/10 dark:border-emerald-500/25 dark:text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] dark:bg-emerald-500 animate-pulse"></span>
-            <span className="text-xs font-bold uppercase tracking-wider">Tesla Audio Stream</span>
-          </div>
-          {hasTeslaSession && (
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
-              Fleet API {teslaShiftState ? `· [${teslaShiftState}]` : 'Activa'}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {onOpenFolders && (
-            <button
-              onClick={onOpenFolders}
-              className="min-[1100px]:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-900 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:border-amber-500/30 dark:text-amber-300 text-xs font-bold transition-colors"
-            >
-              <Folder className="w-3.5 h-3.5" />
-              <span>Abrir Carpetas</span>
-            </button>
-          )}
-          {isOffline ? (
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#DCFCE7] border border-[#86EFAC] text-[#15803D] dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 text-xs font-bold">
-              <ShieldCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">OFFLINE READY</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#DBEAFE] border border-[#93C5FD] text-[#1D4ED8] dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400 text-xs font-bold">
-              <Radio className="w-4 h-4" />
-              <span className="hidden sm:inline">CLOUD STREAM</span>
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Center Stage: Large Artwork & 56-Bar High-Definition Canvas AudioVisualizer */}
-      <div className="relative my-auto flex flex-col items-center justify-center w-full z-10">
-        <div
-          className={`relative w-56 h-56 sm:w-64 sm:h-64 xl:w-72 xl:h-72 [@media(max-height:750px)]:w-[172px] [@media(max-height:750px)]:h-[172px] rounded-3xl overflow-hidden shadow-xl dark:shadow-2xl border border-[#CBD5E1] dark:border-slate-700/60 bg-slate-950 flex items-center justify-center group ${
-            isPlaying ? 'animate-float' : ''
-          }`}
-        >
-          <img
-            src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&h=600&fit=crop"
-            alt="Album Artwork"
-            referrerPolicy="no-referrer"
-            className={`w-full h-full object-cover transition-transform duration-700 ${isPlaying ? 'scale-105' : 'scale-100'}`}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/35 to-transparent flex flex-col justify-end p-4 sm:p-5 [@media(max-height:750px)]:p-3">
-            <div className="flex items-center gap-2.5">
-              <div
-                className={`w-9 h-9 [@media(max-height:750px)]:w-7 [@media(max-height:750px)]:h-7 rounded-full bg-blue-600/95 backdrop-blur-md flex items-center justify-center text-white shadow-lg shrink-0 ${
-                  isPlaying ? 'animate-spin-slow' : ''
-                }`}
-              >
-                <Disc className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-base sm:text-lg [@media(max-height:750px)]:text-sm font-bold text-white truncate">
-                  {currentTrack?.name || 'Selecciona una pista'}
-                </h2>
-                <p className="text-xs [@media(max-height:750px)]:text-[11px] text-blue-300 truncate">
-                  {currentTrack?.album || currentTrack?.artist || 'mimusica / Google Drive'}
-                </p>
-              </div>
+    <div className="flex flex-col justify-between h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] p-4 sm:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-none relative overflow-hidden transition-colors">
+      {/* 1. ZONA SUPERIOR DERECHA: Carátula cuadrada redondeada (96x96px) a la izquierda + Metadatos, Título grande y Carpeta/Artista */}
+      <div className="w-full flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 sm:gap-5 min-w-0 flex-1">
+          {/* 96x96px Rounded Square Artwork */}
+          <div className="relative w-24 h-24 [@media(max-height:750px)]:w-20 [@media(max-height:750px)]:h-20 rounded-2xl overflow-hidden bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-md shrink-0 flex items-center justify-center">
+            <img
+              src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&h=400&fit=crop"
+              alt="Carátula"
+              referrerPolicy="no-referrer"
+              className={`w-full h-full object-cover transition-transform duration-500 ${
+                isPlaying ? 'scale-105' : 'scale-100'
+              }`}
+            />
+            <div className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-[#3B82F6]/90 backdrop-blur-xs flex items-center justify-center text-white shadow-sm">
+              <Disc className={`w-3.5 h-3.5 ${isPlaying ? 'animate-spin-slow' : ''}`} />
             </div>
           </div>
+
+          {/* Left-Aligned Metadata + Large Bold Track Title + Folder/Artist */}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
+                <span className="w-2 h-2 rounded-full bg-[#16A34A] dark:bg-emerald-400 animate-pulse"></span>
+                TESLA AUDIO STREAM
+              </span>
+
+              <span aria-hidden="true" className="text-[#475569] dark:text-[#94A3B8] text-xs font-bold">
+                ·
+              </span>
+
+              {isOffline ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  OFFLINE READY
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD] dark:bg-[#3B82F6]/15 dark:text-[#4DA8FF] dark:border-[#3B82F6]/30">
+                  <Radio className="w-3.5 h-3.5" />
+                  CLOUD STREAM
+                </span>
+              )}
+
+              {hasTeslaSession && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#F8FAFC] text-[#0F172A] border border-[#E2E8F0] dark:bg-[#16181C] dark:text-[#4DA8FF] dark:border-[#2A2D34]">
+                  Fleet API {teslaShiftState ? `[${teslaShiftState}]` : ''}
+                </span>
+              )}
+            </div>
+
+            <h2 className="text-lg sm:text-2xl [@media(max-height:750px)]:text-base font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate leading-tight">
+              {currentTrack?.name || 'Selecciona una pista'}
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-[#475569] dark:text-[#94A3B8] truncate mt-0.5">
+              {currentTrack?.album || currentTrack?.artist || 'mimusica · Google Drive'}
+            </p>
+          </div>
         </div>
 
-        {/* High-Definition 56-Bar Symmetric Canvas Visualizer */}
-        <AudioVisualizer isPlaying={isPlaying} />
+        {onOpenFolders && (
+          <button
+            onClick={onOpenFolders}
+            className="min-[1100px]:hidden h-[40px] px-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] dark:border-[#2A2D34] text-[#0F172A] dark:text-[#F8FAFC] text-xs font-semibold flex items-center gap-1.5 shrink-0"
+          >
+            <Folder className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF]" />
+            <span>Carpetas</span>
+          </button>
+        )}
+      </div>
 
-        {/* Large Autoplay-Blocked Session Resume Overlay Card */}
+      {/* 2. ZONA CENTRAL DERECHA: Visualizador Bicolor + Encabezado Espectro/EQ + Barra de Progreso Interactiva */}
+      <div className="w-full my-auto py-3 [@media(max-height:750px)]:py-1.5 space-y-3.5 [@media(max-height:750px)]:space-y-2 relative">
+        {/* Spectrum Box */}
+        <div className="w-full bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-2xl p-3.5 sm:p-4 [@media(max-height:750px)]:p-2.5">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="font-semibold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider">
+              Espectro de Onda en Tiempo Real
+            </span>
+            <span className="font-mono font-semibold text-[#3B82F6] dark:text-[#4DA8FF]">
+              EQ: {formatEqVal(eqBands.bass)} / {formatEqVal(eqBands.mid)} / {formatEqVal(eqBands.treble)} dB
+            </span>
+          </div>
+
+          <AudioVisualizer isPlaying={isPlaying} />
+        </div>
+
+        {/* Interactive Progress Bar directly below visualizer */}
+        <div className="w-full flex items-center gap-3 px-1">
+          <span className="text-xs font-mono font-semibold text-[#475569] dark:text-[#94A3B8] w-11 text-left shrink-0">
+            {formatTime(currentTime)}
+          </span>
+
+          <div className="relative flex-1 flex items-center">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={Math.min(currentTime, duration || 100)}
+              onChange={(e) => onSeek(Number(e.target.value))}
+              className="w-full h-2 bg-[#E2E8F0] dark:bg-[#16181C] rounded-lg appearance-none cursor-pointer accent-[#3B82F6]"
+              aria-label="Progreso de la pista"
+            />
+          </div>
+
+          <span className="text-xs font-mono font-semibold text-[#475569] dark:text-[#94A3B8] w-12 text-right shrink-0">
+            -{formatTime(remainingTime)}
+          </span>
+        </div>
+
+        {/* Autoplay-Blocked Session Resume Overlay Card */}
         {showResumeOverlay && currentTrack && (
           <div
             onClick={onResumeNow}
-            className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-white/90 dark:bg-slate-950/85 backdrop-blur-md rounded-2xl cursor-pointer animate-fade-in"
+            className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-white/95 dark:bg-[#1C1E22]/95 backdrop-blur-md rounded-2xl cursor-pointer animate-fade-in"
           >
-            <div className="w-full max-w-md bg-white dark:bg-slate-900 border-2 border-[#93C5FD] dark:border-blue-500/60 rounded-3xl p-5 shadow-2xl flex flex-col items-center text-center gap-4">
+            <div className="w-full max-w-md bg-white dark:bg-[#16181C] border-2 border-[#93C5FD] dark:border-[#3B82F6] rounded-2xl p-5 shadow-2xl flex flex-col items-center text-center gap-4">
               <div className="flex items-center gap-3.5 w-full text-left">
-                <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-900 border border-[#CBD5E1] dark:border-slate-700 shrink-0">
+                <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#1C1E22] border border-[#E2E8F0] dark:border-[#2A2D34] shrink-0">
                   <img
                     src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&h=200&fit=crop"
                     alt="Carátula"
@@ -130,14 +209,14 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#DBEAFE] text-[#1D4ED8] dark:bg-blue-500/20 dark:text-blue-300 mb-1">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#DBEAFE] text-[#1D4ED8] dark:bg-[#3B82F6]/20 dark:text-[#4DA8FF] mb-1">
                     <Clock className="w-3 h-3" />
                     Sesión guardada · {formatTime(resumeTime)}
                   </span>
-                  <h3 className="text-base sm:text-lg font-bold text-[#0F172A] dark:text-white truncate">
+                  <h3 className="text-base font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate">
                     {currentTrack.name}
                   </h3>
-                  <p className="text-xs font-medium text-[#475569] dark:text-slate-400 truncate">
+                  <p className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] truncate">
                     {currentTrack.album || currentTrack.artist || 'mimusica'}
                   </p>
                 </div>
@@ -148,12 +227,12 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
                   e.stopPropagation();
                   if (onResumeNow) onResumeNow();
                 }}
-                className="w-full min-h-[54px] py-3 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold text-base shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2.5 transition-all"
+                className="w-full min-h-[52px] py-3 px-6 rounded-xl bg-[#3B82F6] hover:bg-blue-500 active:scale-[0.98] text-white font-bold text-base shadow-lg shadow-[#3B82F6]/30 flex items-center justify-center gap-2.5 transition-all"
               >
-                <Play className="w-6 h-6 fill-current" />
+                <Play className="w-5 h-5 fill-current" />
                 <span>Reanudar ahora ({formatTime(resumeTime)})</span>
               </button>
-              <p className="text-[11px] font-medium text-[#475569] dark:text-slate-400">
+              <p className="text-[11px] font-medium text-[#475569] dark:text-[#94A3B8]">
                 O toca en cualquier punto libre de la pantalla para continuar
               </p>
             </div>
@@ -161,9 +240,119 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
         )}
       </div>
 
-      {/* Subtle bottom status line inside the stage card */}
-      <div className="w-full text-center text-[11px] font-medium text-[#475569] dark:text-slate-500 pt-2 relative z-10">
-        Usa la barra inferior fija o los mandos del volante del Tesla para controlar la reproducción
+      {/* 3. ZONA INFERIOR DERECHA: Botonera Principal Centrada (72x72px Play/Pausa) + Deslizador Horizontal Ancho de Volumen */}
+      <div className="w-full space-y-4 [@media(max-height:750px)]:space-y-2.5">
+        {/* Centered Transport Controls Row */}
+        <div className="w-full flex items-center justify-center gap-3 sm:gap-5">
+          {/* [Aleatorio] Discreet Left */}
+          <button
+            onClick={onToggleShuffle}
+            className={`w-11 h-11 rounded-xl border flex items-center justify-center transition-all active:scale-95 ${
+              shuffle
+                ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#1D4ED8] dark:bg-[#3B82F6]/20 dark:border-[#4DA8FF]/60 dark:text-[#4DA8FF]'
+                : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#475569] hover:text-[#0F172A] hover:border-[#93C5FD] dark:bg-[#16181C] dark:border-[#2A2D34] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
+            }`}
+            title="Modo Aleatorio (Shuffle)"
+          >
+            <Shuffle className="w-4 h-4" />
+          </button>
+
+          {/* [Anterior] */}
+          <button
+            onClick={onPrev}
+            className="w-14 h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
+            title="Anterior"
+          >
+            <SkipBack className="w-6 h-6" />
+          </button>
+
+          {/* [Play / Pausa] 72x72px Rounded Square Blue Button */}
+          <button
+            onClick={onTogglePlay}
+            className="w-[72px] h-[72px] [@media(max-height:750px)]:w-[60px] [@media(max-height:750px)]:h-[60px] rounded-2xl bg-[#3B82F6] hover:bg-blue-500 text-white shadow-lg shadow-[#3B82F6]/30 flex items-center justify-center transition-all active:scale-95"
+            title={isPlaying ? 'Pausar' : 'Reproducir'}
+          >
+            {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 ml-0.5 fill-current" />}
+          </button>
+
+          {/* [Siguiente] */}
+          <button
+            onClick={onNext}
+            className="w-14 h-14 [@media(max-height:750px)]:w-12 [@media(max-height:750px)]:h-12 rounded-2xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#F8FAFC] flex items-center justify-center transition-all active:scale-95"
+            title="Siguiente"
+          >
+            <SkipForward className="w-6 h-6" />
+          </button>
+
+          {/* [Repetir] Discreet Right */}
+          <button
+            onClick={onToggleRepeat}
+            className={`w-11 h-11 rounded-xl border relative flex items-center justify-center transition-all active:scale-95 ${
+              repeatMode !== 'off'
+                ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#1D4ED8] dark:bg-[#3B82F6]/20 dark:border-[#4DA8FF]/60 dark:text-[#4DA8FF]'
+                : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#475569] hover:text-[#0F172A] hover:border-[#93C5FD] dark:bg-[#16181C] dark:border-[#2A2D34] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
+            }`}
+            title="Modo Repetición"
+          >
+            <Repeat className="w-4 h-4" />
+            {repeatMode === 'one' && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#3B82F6] text-[9px] font-bold text-white rounded-full flex items-center justify-center">
+                1
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Bottom Wide Horizontal Volume Bar with Speaker Icon (left) & Percentage % (right) */}
+        <div className="w-full flex items-center gap-3 bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-xl px-4 py-2.5">
+          <button
+            onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)}
+            className="text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC] transition-colors shrink-0"
+            title={volume === 0 ? 'Restaurar volumen' : 'Silenciar'}
+          >
+            {volume === 0 ? (
+              <VolumeX className="w-5 h-5 text-rose-500" />
+            ) : volume < 0.5 ? (
+              <Volume1 className="w-5 h-5 text-[#3B82F6] dark:text-[#4DA8FF]" />
+            ) : (
+              <Volume2 className="w-5 h-5 text-[#3B82F6] dark:text-[#4DA8FF]" />
+            )}
+          </button>
+
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => onVolumeChange(Number(e.target.value))}
+            className="flex-1 h-2 bg-[#E2E8F0] dark:bg-[#2A2D34] rounded-lg appearance-none cursor-pointer accent-[#3B82F6]"
+            aria-label="Volumen de reproducción"
+          />
+
+          <span className="text-xs font-mono font-bold text-[#0F172A] dark:text-[#F8FAFC] w-10 text-right shrink-0">
+            {volumePercent}%
+          </span>
+
+          {hasTeslaSession && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-[#E2E8F0] dark:border-[#2A2D34]">
+              <button
+                onClick={onTeslaVolumeDown}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1C1E22] hover:bg-[#EFF6FF] border border-[#E2E8F0] dark:border-[#2A2D34] text-[#0F172A] dark:text-[#F8FAFC] font-bold text-xs active:scale-95"
+                title="Bajar Volumen Coche (Vol -)"
+              >
+                Vol -
+              </button>
+              <button
+                onClick={onTeslaVolumeUp}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1C1E22] hover:bg-[#EFF6FF] border border-[#E2E8F0] dark:border-[#2A2D34] text-[#0F172A] dark:text-[#F8FAFC] font-bold text-xs active:scale-95"
+                title="Subir Volumen Coche (Vol +)"
+              >
+                Vol +
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

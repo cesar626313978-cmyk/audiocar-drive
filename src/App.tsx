@@ -7,7 +7,6 @@ import { AudioCacheDB } from './services/db';
 import { Navbar } from './components/Navbar';
 import { FolderExplorer } from './components/FolderExplorer';
 import { PlayerPanel } from './components/PlayerPanel';
-import { DrivingHUD } from './components/DrivingHUD';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { AlertCircle, Loader2 } from 'lucide-react';
@@ -713,7 +712,7 @@ export default function App() {
     <div
       className={`h-screen overflow-hidden flex flex-col transition-colors duration-200 ${
         theme === 'dark'
-          ? 'dark bg-slate-950 text-slate-100'
+          ? 'dark bg-[#121316] text-[#F8FAFC]'
           : 'bg-[#F4F6F9] text-[#0F172A]'
       }`}
     >
@@ -770,11 +769,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Responsive Grid Layout:
-          - Desktop / Tesla Park (>= 1100px): 2 columns side-by-side
-          - Tesla Drive Split-Screen (< 1100px): Full-width toggle between Library & Player
-          - Single fixed bottom footer (DrivingHUD) across all viewports */}
-      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-6 max-w-[1600px] w-full mx-auto pb-28">
+      {/* Main Responsive Twin-Cabin Grid Layout identical to AudioCar Radio */}
+      <main className="flex-1 min-h-0 p-3 sm:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 min-[1100px]:grid-cols-12 gap-4 sm:gap-5 max-w-[1600px] w-full mx-auto">
         {/* Left Column: Folder Explorer */}
         <div
           className={`min-[1100px]:col-span-5 xl:col-span-5 h-full min-h-0 ${
@@ -800,7 +796,7 @@ export default function App() {
           />
         </div>
 
-        {/* Right Column: Player Panel (Artwork, 56-Bar Visualizer & Autoplay Resume Overlay) */}
+        {/* Right Column: Unified Player Panel identical to AudioCar Radio */}
         <div
           className={`min-[1100px]:col-span-7 xl:col-span-7 h-full min-h-0 ${
             mobileView === 'player' ? 'block' : 'hidden min-[1100px]:block'
@@ -809,44 +805,35 @@ export default function App() {
           <PlayerPanel
             currentTrack={playbackState.currentTrack}
             isPlaying={playbackState.isPlaying}
+            currentTime={playbackState.currentTime}
+            duration={playbackState.duration}
+            volume={playbackState.volume}
+            repeatMode={playbackState.repeatMode}
+            shuffle={playbackState.shuffle}
             isOffline={playbackState.isOffline}
+            eqBands={settings.eqBands}
             hasTeslaSession={hasTeslaSession}
             teslaShiftState={teslaShiftState}
             showResumeOverlay={showResumeOverlay}
             resumeTime={savedResumeTime || playbackState.currentTime}
             onResumeNow={handleResumeNow}
+            onTogglePlay={handleTogglePlay}
+            onNext={handleNextTrack}
+            onPrev={handlePrevTrack}
+            onSeek={handleSeek}
+            onVolumeChange={handleVolumeChange}
+            onToggleRepeat={() => {
+              const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
+              const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
+              setPlaybackState((prev) => ({ ...prev, repeatMode: next }));
+            }}
+            onToggleShuffle={() => setPlaybackState((prev) => ({ ...prev, shuffle: !prev.shuffle }))}
+            onTeslaVolumeDown={handleTeslaVolumeDown}
+            onTeslaVolumeUp={handleTeslaVolumeUp}
             onOpenFolders={() => setMobileView('library')}
           />
         </div>
       </main>
-
-      {/* Single Fixed Bottom Player Footer for AudioCar Drive */}
-      <DrivingHUD
-        currentTrack={playbackState.currentTrack}
-        isPlaying={playbackState.isPlaying}
-        currentTime={playbackState.currentTime}
-        duration={playbackState.duration}
-        volume={playbackState.volume}
-        repeatMode={playbackState.repeatMode}
-        shuffle={playbackState.shuffle}
-        isOffline={playbackState.isOffline}
-        mobileView={mobileView}
-        hasTeslaSession={hasTeslaSession}
-        onTogglePlay={handleTogglePlay}
-        onNext={handleNextTrack}
-        onPrev={handlePrevTrack}
-        onSeek={handleSeek}
-        onVolumeChange={handleVolumeChange}
-        onToggleRepeat={() => {
-          const modes: ('off' | 'all' | 'one')[] = ['off', 'all', 'one'];
-          const next = modes[(modes.indexOf(playbackState.repeatMode) + 1) % modes.length];
-          setPlaybackState((prev) => ({ ...prev, repeatMode: next }));
-        }}
-        onToggleShuffle={() => setPlaybackState((prev) => ({ ...prev, shuffle: !prev.shuffle }))}
-        onToggleMobileView={() => setMobileView((prev) => (prev === 'player' ? 'library' : 'player'))}
-        onTeslaVolumeDown={handleTeslaVolumeDown}
-        onTeslaVolumeUp={handleTeslaVolumeUp}
-      />
 
       {/* Modals */}
       <AudioSettingsModal

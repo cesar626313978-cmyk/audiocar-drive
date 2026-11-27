@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Wifi, Home, RefreshCw, Music, User } from 'lucide-react';
+import { Disc3, Sliders, Folder, LogOut, Sun, Moon, ShieldCheck, Radio, Home, RefreshCw, Music, User } from 'lucide-react';
 
 interface NavbarProps {
   isAuthenticated: boolean;
@@ -35,7 +35,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Close profile popover when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
@@ -51,93 +50,104 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [isProfileOpen]);
 
   return (
-    <header className="w-full max-w-full px-4 py-2.5 border-b border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 shadow-xs dark:shadow-none">
-      <div className="w-full max-w-full flex items-center justify-between gap-2 sm:gap-4 flex-nowrap">
-        {/* a) Left Block: Logo/Title + Compact Tesla OS badge + truncated folder name */}
-        <div className="flex items-center gap-2.5 min-w-0 shrink">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-            <Disc3 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin-slow" />
+    <header className="w-full max-w-full px-4 sm:px-6 py-2.5 border-b border-[#E2E8F0] dark:border-[#2A2D34] bg-white dark:bg-[#1C1E22] sticky top-0 z-30 transition-colors">
+      <div className="max-w-[1600px] mx-auto w-full flex items-center justify-between gap-2 sm:gap-4 flex-nowrap">
+        {/* 1. Left: Rounded Blue Logo + AudioCar Drive title & discreet folder subtitle */}
+        <div className="flex items-center gap-3 min-w-0 shrink">
+          <div className="w-10 h-10 rounded-xl bg-[#3B82F6] flex items-center justify-center text-white shadow-sm shadow-[#3B82F6]/30 shrink-0">
+            <Disc3 className="w-5 h-5 animate-spin-slow" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-bold tracking-tight text-[#0F172A] dark:text-white flex items-center gap-1.5 truncate">
-              <span className="truncate">AudioCar Drive</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD] dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 shrink-0">
-                Tesla OS
-              </span>
-            </h1>
-            <p className="text-xs text-[#475569] dark:text-slate-400 flex items-center gap-1 truncate">
-              <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-slate-400" />
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#0F172A] dark:text-[#F8FAFC] truncate">
+                AudioCar Drive
+              </h1>
+            </div>
+            <p className="text-xs text-[#475569] dark:text-[#94A3B8] flex items-center gap-1 truncate">
+              <Folder className="w-3 h-3 shrink-0 text-[#3B82F6] dark:text-[#4DA8FF]" />
               <span className="truncate">{folderName}</span>
             </p>
           </div>
         </div>
 
-        {/* b) Center Block: Orange "Carpetas / Pistas" button & "Inicio / Hub" button (uniform 44px height, px-4) */}
+        {/* 2. Center: [Inicio / Hub] button + status pill (Cache: XX MB / TESLA STREAM) */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            onClick={onToggleMobileView}
-            className={`min-[1100px]:hidden h-[44px] px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-md active:scale-95 transition-all border whitespace-nowrap ${
-              mobileView === 'player'
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-amber-500/20'
-                : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400 shadow-blue-600/25'
-            }`}
-          >
-            {mobileView === 'player' ? (
-              <>
-                <Folder className="w-4 h-4 fill-slate-950/20 shrink-0" />
-                <span>Carpetas / Pistas</span>
-              </>
-            ) : (
-              <>
-                <Music className="w-4 h-4 shrink-0" />
-                <span>Ver Reproductor</span>
-              </>
-            )}
-          </button>
-
           <button
             onClick={() => {
               window.location.href = '/';
             }}
-            className="h-[44px] px-4 flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0F172A] dark:text-slate-200 bg-[#F8FAFC] dark:bg-slate-900 hover:bg-[#EFF6FF] dark:hover:bg-slate-800 rounded-xl transition-colors border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-slate-800 whitespace-nowrap"
+            className="h-[40px] px-3.5 sm:px-4 flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] rounded-xl transition-colors border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] whitespace-nowrap"
             title="Volver al Launcher / Hub"
           >
-            <Home className="w-4 h-4 text-blue-600 dark:text-blue-500 shrink-0" />
+            <Home className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
             <span>Inicio / Hub</span>
           </button>
 
-          {/* Optional extra cache info only on wide desktop viewports (>= 1280px) */}
-          <div className="hidden xl:flex items-center gap-2 text-xs text-[#475569] dark:text-slate-300 ml-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F8FAFC] dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800">
-              <Wifi className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
-              <span>Cache: <strong className="font-semibold text-[#0F172A] dark:text-white">{cacheSize} MB</strong></span>
-            </div>
+          <div className="hidden md:flex items-center gap-2 h-[40px] px-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] text-xs font-medium text-[#475569] dark:text-[#94A3B8] whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">TESLA STREAM</span>
+            <span aria-hidden="true" className="opacity-40">·</span>
+            <Radio className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
+            <span>Cache: <strong className="font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{cacheSize} MB</strong></span>
           </div>
         </div>
 
-        {/* c) Right Block: Equalizer (40x40px), Theme (40x40px), and Circular Avatar (38x38px) with Popover */}
-        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 pr-0.5">
+        {/* 3. Right: [Ecualizador 3B] + [Modo Día / Modo Noche] + [Carpetas / Reproductor] (narrow view) + Google Avatar */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           <button
             onClick={onOpenSettings}
-            className="w-[40px] h-[40px] flex items-center justify-center rounded-xl text-[#0F172A] dark:text-slate-300 bg-[#F8FAFC] dark:bg-transparent hover:bg-[#EFF6FF] dark:hover:bg-slate-900 border border-[#E2E8F0] dark:border-transparent hover:border-[#93C5FD] dark:hover:border-slate-800 transition-colors"
-            title="Ecualizador y Ajustes de Audio"
+            className="h-[40px] px-3 sm:px-3.5 flex items-center gap-2 rounded-xl text-xs sm:text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap"
+            title="Ecualizador 3 Bandas y Ajustes"
           >
-            <Sliders className="w-5 h-5" />
+            <Sliders className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
+            <span className="hidden sm:inline">Ecualizador 3B</span>
           </button>
 
           <button
             onClick={onToggleTheme}
-            className="w-[40px] h-[40px] flex items-center justify-center rounded-xl text-[#0F172A] dark:text-slate-300 bg-[#F8FAFC] dark:bg-transparent hover:bg-[#EFF6FF] dark:hover:bg-slate-900 border border-[#E2E8F0] dark:border-transparent hover:border-[#93C5FD] dark:hover:border-slate-800 transition-colors"
-            title="Cambiar Tema (Día / Noche)"
+            className="h-[40px] px-3 sm:px-3.5 flex items-center gap-2 rounded-xl text-xs sm:text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap"
+            title="Cambiar entre Modo Día y Modo Noche"
           >
-            {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-[#0F172A]" />}
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Modo Día</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-[#475569] shrink-0" />
+                <span className="hidden sm:inline">Modo Noche</span>
+              </>
+            )}
+          </button>
+
+          {/* Responsive view switcher on split-screen (< 1100px) */}
+          <button
+            onClick={onToggleMobileView}
+            className={`min-[1100px]:hidden h-[40px] px-3.5 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition-all border whitespace-nowrap ${
+              mobileView === 'player'
+                ? 'bg-[#F8FAFC] dark:bg-[#16181C] text-[#0F172A] dark:text-[#F8FAFC] border-[#E2E8F0] dark:border-[#2A2D34] hover:border-[#93C5FD]'
+                : 'bg-[#3B82F6] text-white border-[#3B82F6]'
+            }`}
+          >
+            {mobileView === 'player' ? (
+              <>
+                <Folder className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
+                <span>Carpetas</span>
+              </>
+            ) : (
+              <>
+                <Music className="w-4 h-4 shrink-0" />
+                <span>Reproductor</span>
+              </>
+            )}
           </button>
 
           {isAuthenticated ? (
             <div className="relative" ref={popoverRef}>
               <button
                 onClick={() => setIsProfileOpen(prev => !prev)}
-                className="relative w-[38px] h-[38px] rounded-full focus:outline-none ring-2 ring-[#CBD5E1] dark:ring-slate-700/80 hover:ring-blue-500 transition-all flex items-center justify-center bg-[#F8FAFC] dark:bg-slate-800 text-[#0F172A] dark:text-slate-200"
+                className="relative w-[38px] h-[38px] rounded-full focus:outline-none ring-2 ring-[#E2E8F0] dark:ring-[#2A2D34] hover:ring-[#3B82F6] dark:hover:ring-[#4DA8FF] transition-all flex items-center justify-center bg-[#F8FAFC] dark:bg-[#16181C] text-[#0F172A] dark:text-[#F8FAFC]"
                 title={userEmail ? `Conectado: ${userEmail}` : 'Cuenta de Google Drive'}
               >
                 {userPicture ? (
@@ -148,17 +158,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     className="w-[38px] h-[38px] rounded-full object-cover"
                   />
                 ) : (
-                  <User className="w-5 h-5 text-[#475569] dark:text-slate-300" />
+                  <User className="w-5 h-5 text-[#475569] dark:text-[#94A3B8]" />
                 )}
-                {/* Green online status badge on bottom-right corner of avatar */}
-                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950"></span>
+                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#1C1E22]"></span>
               </button>
 
-              {/* Floating Popover Menu */}
               {isProfileOpen && (
-                <div className="absolute right-0 mt-2.5 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 shadow-xl dark:shadow-2xl p-3.5 z-50 text-[#0F172A] dark:text-slate-100 animate-fade-in">
-                  <div className="flex items-center gap-3 pb-3 border-b border-[#E2E8F0] dark:border-slate-800">
-                    <div className="relative w-10 h-10 rounded-full bg-[#F8FAFC] dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <div className="absolute right-0 mt-2.5 w-64 rounded-2xl bg-white dark:bg-[#1C1E22] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-xl dark:shadow-2xl p-3.5 z-50 text-[#0F172A] dark:text-[#F8FAFC] animate-fade-in">
+                  <div className="flex items-center gap-3 pb-3 border-b border-[#E2E8F0] dark:border-[#2A2D34]">
+                    <div className="relative w-10 h-10 rounded-full bg-[#F8FAFC] dark:bg-[#16181C] flex items-center justify-center shrink-0">
                       {userPicture ? (
                         <img
                           src={userPicture}
@@ -167,26 +175,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className="w-10 h-10 rounded-full object-cover"
                         />
                       ) : (
-                        <User className="w-5 h-5 text-[#475569] dark:text-slate-300" />
+                        <User className="w-5 h-5 text-[#475569] dark:text-[#94A3B8]" />
                       )}
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#1C1E22]"></span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-[#15803D] dark:text-emerald-400">
                         Sesión Conectada
                       </p>
-                      <p className="text-xs font-semibold text-[#0F172A] dark:text-slate-200 truncate" title={userEmail || ''}>
+                      <p className="text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] truncate" title={userEmail || ''}>
                         {userEmail || 'Google Drive'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="py-2.5 border-b border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between text-xs text-[#475569] dark:text-slate-400">
+                  <div className="py-2.5 border-b border-[#E2E8F0] dark:border-[#2A2D34] flex items-center justify-between text-xs text-[#475569] dark:text-[#94A3B8]">
                     <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#1D4ED8] dark:text-blue-400" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF]" />
                       Scope: drive.readonly
                     </span>
-                    <span className="font-mono font-semibold text-[#0F172A] dark:text-slate-300">{cacheSize} MB</span>
+                    <span className="font-mono font-semibold text-[#0F172A] dark:text-[#F8FAFC]">{cacheSize} MB</span>
                   </div>
 
                   <div className="pt-2.5 space-y-1.5">
@@ -195,9 +203,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setIsProfileOpen(false);
                         onChangeAccount();
                       }}
-                      className="w-full min-h-[40px] flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[#0F172A] dark:text-slate-200 hover:bg-[#EFF6FF] dark:hover:bg-slate-800 rounded-xl transition-colors"
+                      className="w-full min-h-[40px] flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#EFF6FF] dark:hover:bg-[#16181C] rounded-xl transition-colors"
                     >
-                      <RefreshCw className="w-4 h-4 text-[#1D4ED8] dark:text-blue-400" />
+                      <RefreshCw className="w-4 h-4 text-[#3B82F6] dark:text-[#4DA8FF]" />
                       <span>Cambiar cuenta de Google</span>
                     </button>
 
@@ -218,7 +226,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={onOpenLogin}
-              className="h-[40px] px-3.5 flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-600/20 transition-colors whitespace-nowrap"
+              className="h-[40px] px-3.5 flex items-center gap-1.5 text-xs font-semibold text-white bg-[#3B82F6] hover:bg-blue-500 rounded-xl shadow-sm transition-colors whitespace-nowrap"
             >
               <span>Conectar Drive</span>
             </button>

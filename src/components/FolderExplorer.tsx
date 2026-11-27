@@ -50,7 +50,6 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   const [viewMode, setViewMode] = useState<'explorer' | 'all-tracks'>('explorer');
   const [folderDisplayStyle, setFolderDisplayStyle] = useState<'list' | 'grid'>('list');
 
-  // Build path of folders from root to target id for Windows-style breadcrumbs
   const findFolderPath = (
     node: PlaylistFolder,
     targetId: string,
@@ -67,7 +66,6 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
     return null;
   };
 
-  // Sync folder ID when library loads, preserving selectedFolderId if it exists in the library tree
   useEffect(() => {
     if (selectedFolderId && findFolderPath(library, selectedFolderId)) {
       setCurrentFolderId(selectedFolderId);
@@ -89,7 +87,6 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
     }
   }, [activeFolder.id, activeFolder.name]);
 
-  // Helper to count and gather all tracks inside a folder recursively
   const getFolderAllTracks = (folder: PlaylistFolder): Track[] => {
     let list = [...folder.tracks];
     if (folder.subfolders) {
@@ -111,7 +108,6 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
     return [...activeFolder.tracks].sort((a, b) => collator.compare(a.name, b.name));
   }, [activeFolder]);
 
-  // Tracks to show depending on search, "All Tracks" mode, or current folder
   const displayedTracks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -128,7 +124,6 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
     return activeFolderTracks;
   }, [searchQuery, viewMode, allLibraryTracks, activeFolderTracks]);
 
-  // Subfolders matching search query when searching
   const searchedSubfolders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
@@ -177,22 +172,22 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-slate-900/60 backdrop-blur-md rounded-2xl border border-[#E2E8F0] dark:border-slate-800 shadow-sm dark:shadow-none p-3 sm:p-4 overflow-hidden">
+    <div className="flex flex-col h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] shadow-sm dark:shadow-none p-3.5 sm:p-4 overflow-hidden transition-colors">
       {/* Top Search & Mode Bar */}
       <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 mb-3">
         <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#475569] dark:text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#475569] dark:text-[#94A3B8]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar carpeta o canción..."
-            className="w-full min-h-[44px] pl-10 pr-8 py-2 bg-white dark:bg-slate-950/70 border border-[#CBD5E1] dark:border-slate-800 rounded-xl text-sm text-[#0F172A] dark:text-slate-200 placeholder-[#475569] dark:placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full min-h-[42px] pl-10 pr-8 py-2 bg-white dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-[12px] text-sm text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#475569] dark:placeholder-[#94A3B8] focus:outline-none focus:border-[#3B82F6] dark:focus:border-[#4DA8FF] transition-colors"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-[#475569] hover:text-[#0F172A] dark:text-slate-400 dark:hover:text-white"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]"
               title="Limpiar búsqueda"
             >
               <X className="w-4 h-4" />
@@ -201,18 +196,18 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         </div>
 
         {/* Toggle Explorer vs All Tracks */}
-        <div className="flex items-center bg-[#F8FAFC] dark:bg-slate-950/80 p-1 rounded-xl border border-[#E2E8F0] dark:border-slate-800 shrink-0">
+        <div className="flex items-center bg-[#F8FAFC] dark:bg-[#16181C] p-1 rounded-[12px] border border-[#E2E8F0] dark:border-[#2A2D34] shrink-0">
           <button
             onClick={() => {
               setViewMode('explorer');
               setSearchQuery('');
             }}
-            className={`min-h-[36px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`min-h-[34px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
               viewMode === 'explorer' && !searchQuery
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-[#475569] hover:text-[#0F172A] dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'bg-[#3B82F6] text-white shadow-xs'
+                : 'text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
             }`}
-            title="Explorador por carpetas (estilo Windows)"
+            title="Explorador por carpetas"
           >
             <Folder className="w-3.5 h-3.5" />
             <span>Carpetas</span>
@@ -222,10 +217,10 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
               setViewMode('all-tracks');
               setSearchQuery('');
             }}
-            className={`min-h-[36px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`min-h-[34px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
               viewMode === 'all-tracks' && !searchQuery
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-[#475569] hover:text-[#0F172A] dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'bg-[#3B82F6] text-white shadow-xs'
+                : 'text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
             }`}
             title="Ver todas las canciones"
           >
@@ -234,52 +229,49 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
           </button>
         </div>
 
-        {/* Direct return to Player button on narrow screens (< 1100px) */}
         {onSwitchToPlayer && (
           <button
             onClick={onSwitchToPlayer}
-            className="min-[1100px]:hidden min-h-[44px] px-3.5 py-2 rounded-xl bg-[#DBEAFE] hover:bg-blue-200 border border-[#93C5FD] text-[#1D4ED8] dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:border-blue-500/40 dark:text-blue-300 text-xs font-bold flex items-center gap-1.5 shrink-0"
+            className="min-[1100px]:hidden min-h-[42px] px-3.5 py-2 rounded-[12px] bg-[#EFF6FF] hover:bg-blue-100 border border-[#93C5FD] text-[#1D4ED8] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] dark:text-[#4DA8FF] text-xs font-bold flex items-center gap-1.5 shrink-0"
             title="Volver a la vista principal del reproductor"
           >
-            <Disc className="w-4 h-4 text-[#1D4ED8] dark:text-blue-400" />
+            <Disc className="w-4 h-4" />
             <span>Reproductor</span>
           </button>
         )}
       </div>
 
-      {/* Windows Explorer Address / Breadcrumb Bar */}
+      {/* Breadcrumb Bar with [Aleatorio] and [Reproducir] */}
       {viewMode === 'explorer' && !searchQuery && (
-        <div className="flex items-center justify-between gap-2 mb-3 px-2.5 py-2 bg-[#F8FAFC] dark:bg-slate-950/80 border border-[#E2E8F0] dark:border-slate-800/90 rounded-xl">
+        <div className="flex items-center justify-between gap-2 mb-3 px-2.5 py-2 bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-[12px]">
           <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto scrollbar-none">
-            {/* Up One Level Button */}
             <button
               onClick={() => parentFolder && setCurrentFolderId(parentFolder.id)}
               disabled={!parentFolder}
-              className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg bg-white dark:bg-transparent text-[#0F172A] dark:text-slate-300 hover:bg-[#EFF6FF] dark:hover:text-white dark:hover:bg-slate-800 disabled:opacity-35 disabled:pointer-events-none transition-colors shrink-0 mr-1 border border-[#CBD5E1] dark:border-slate-800"
-              title="Subir un nivel (Carpeta anterior)"
+              className="min-h-[34px] min-w-[34px] flex items-center justify-center p-1.5 rounded-lg bg-white dark:bg-[#1C1E22] text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] disabled:opacity-35 disabled:pointer-events-none transition-colors shrink-0 mr-1 border border-[#E2E8F0] dark:border-[#2A2D34]"
+              title="Subir un nivel"
             >
               <ArrowUp className="w-4 h-4" />
             </button>
 
-            {/* Breadcrumbs */}
             {breadcrumbPath.map((node, index) => {
               const isLast = index === breadcrumbPath.length - 1;
               return (
                 <React.Fragment key={node.id}>
-                  {index > 0 && <ChevronRight className="w-3.5 h-3.5 text-[#475569] dark:text-slate-600 shrink-0" />}
+                  {index > 0 && <ChevronRight className="w-3.5 h-3.5 text-[#475569] dark:text-[#94A3B8] shrink-0" />}
                   <button
                     onClick={() => setCurrentFolderId(node.id)}
-                    className={`min-h-[36px] flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium truncate max-w-[170px] transition-colors ${
+                    className={`min-h-[34px] flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium truncate max-w-[170px] transition-colors ${
                       isLast
-                        ? 'bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD] dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30 font-semibold'
-                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#EFF6FF] dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                        ? 'bg-[#EFF6FF] text-[#1D4ED8] border border-[#93C5FD] dark:bg-[#3B82F6]/15 dark:text-[#4DA8FF] dark:border-[#3B82F6]/40 font-semibold'
+                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#EFF6FF] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC] dark:hover:bg-[#1C1E22]'
                     }`}
                     title={node.name}
                   >
                     {index === 0 ? (
-                      <Home className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
+                      <Home className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
                     ) : (
-                      <FolderOpen className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
+                      <FolderOpen className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
                     )}
                     <span className="truncate">{node.name}</span>
                   </button>
@@ -288,25 +280,24 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
             })}
           </div>
 
-          {/* Right tools: Shuffle, Play Folder & Grid/List toggle */}
           <div className="flex items-center gap-1.5 shrink-0">
             {(activeFolderTracks.length > 0 || activeSubfolders.length > 0) && (
               <>
                 <button
                   onClick={handleShuffleCurrentFolder}
-                  className={`min-h-[36px] flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  className={`min-h-[34px] flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                     shuffle
-                      ? 'bg-purple-100 hover:bg-purple-200 text-purple-900 border-purple-400 dark:bg-purple-600/30 dark:hover:bg-purple-600/40 dark:text-purple-200 dark:border-purple-500/50 shadow-xs'
-                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-600/20 dark:hover:bg-indigo-600/30 dark:text-indigo-300 dark:border-indigo-500/30'
+                      ? 'bg-[#EFF6FF] text-[#1D4ED8] border-[#93C5FD] dark:bg-[#3B82F6]/20 dark:text-[#4DA8FF] dark:border-[#3B82F6]/50'
+                      : 'bg-white hover:bg-[#EFF6FF] text-[#0F172A] border-[#E2E8F0] dark:bg-[#1C1E22] dark:hover:bg-[#22252B] dark:text-[#F8FAFC] dark:border-[#2A2D34]'
                   }`}
-                  title="Reproducir esta carpeta en modo aleatorio (Shuffle)"
+                  title="Reproducir esta carpeta en modo aleatorio"
                 >
-                  <Shuffle className="w-3.5 h-3.5" />
+                  <Shuffle className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF]" />
                   <span>Aleatorio</span>
                 </button>
                 <button
                   onClick={handlePlayCurrentFolder}
-                  className="min-h-[36px] flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#DCFCE7] hover:bg-emerald-200 text-[#15803D] border border-[#86EFAC] dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 dark:text-emerald-300 dark:border-emerald-500/30 text-xs font-semibold transition-colors"
+                  className="min-h-[34px] flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#3B82F6] hover:bg-blue-500 text-white border border-[#3B82F6] text-xs font-semibold transition-colors"
                   title="Reproducir esta carpeta en orden"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
@@ -318,7 +309,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
             {activeSubfolders.length > 0 && (
               <button
                 onClick={() => setFolderDisplayStyle(prev => (prev === 'list' ? 'grid' : 'list'))}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg bg-white dark:bg-transparent text-[#0F172A] dark:text-slate-400 hover:bg-[#EFF6FF] dark:hover:text-white dark:hover:bg-slate-800 border border-[#CBD5E1] dark:border-slate-800 transition-colors"
+                className="min-h-[34px] min-w-[34px] flex items-center justify-center p-1.5 rounded-lg bg-white dark:bg-[#1C1E22] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F8FAFC] border border-[#E2E8F0] dark:border-[#2A2D34] transition-colors"
                 title={folderDisplayStyle === 'list' ? 'Vista en cuadrícula' : 'Vista en lista'}
               >
                 {folderDisplayStyle === 'list' ? (
@@ -332,33 +323,33 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         </div>
       )}
 
-      {/* Main Scrollable Content Area (Folders + Tracks like Windows Explorer, min-h-[56px] rows for driving) */}
-      <div className="flex-1 overflow-y-auto pr-1 space-y-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+      {/* Main Scrollable Content Area (Cards with min-h-[60px], rounded-[12px], bg-[#F8FAFC] / dark:bg-[#16181C], border-[#E2E8F0] / dark:border-[#2A2D34]) */}
+      <div className="flex-1 overflow-y-auto pr-1 space-y-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-[#2A2D34]">
         {/* Back Row (".. Carpeta superior") when inside a subfolder */}
         {viewMode === 'explorer' && !searchQuery && parentFolder && (
           <div
             onClick={() => setCurrentFolderId(parentFolder.id)}
-            className="min-h-[56px] flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] dark:bg-slate-950/50 dark:hover:bg-slate-800/70 dark:border-slate-800/80 cursor-pointer text-[#0F172A] dark:text-slate-300 transition-colors active:scale-[0.99]"
+            className="min-h-[60px] flex items-center justify-between p-3 rounded-[12px] bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#93C5FD] dark:bg-[#16181C] dark:hover:bg-[#22252B] dark:border-[#2A2D34] cursor-pointer text-[#0F172A] dark:text-[#F8FAFC] transition-colors active:scale-[0.99]"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-[10px] bg-white dark:bg-[#1C1E22] border border-[#E2E8F0] dark:border-[#2A2D34] text-[#3B82F6] dark:text-[#4DA8FF] flex items-center justify-center">
                 <ArrowUp className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-[#0F172A] dark:text-slate-200">.. (Subir a {parentFolder.name})</p>
-                <p className="text-xs text-[#475569] dark:text-slate-500">Volver a la carpeta anterior</p>
+                <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">.. (Subir a {parentFolder.name})</p>
+                <p className="text-xs text-[#475569] dark:text-[#94A3B8]">Volver a la carpeta anterior</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* SUBFOLDERS SECTION (Explorer Mode or Search Mode) */}
+        {/* SUBFOLDERS SECTION */}
         {((viewMode === 'explorer' && !searchQuery && activeSubfolders.length > 0) ||
           (searchQuery && searchedSubfolders.length > 0)) && (
           <div>
             <div className="flex items-center justify-between px-1 mb-2">
-              <h3 className="text-xs font-bold text-[#475569] dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Folder className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+              <h3 className="text-xs font-bold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider flex items-center gap-1.5">
+                <Folder className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF]" />
                 <span>
                   Carpetas ({searchQuery ? searchedSubfolders.length : activeSubfolders.length})
                 </span>
@@ -386,28 +377,33 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
                       setViewMode('explorer');
                       setSearchQuery('');
                     }}
-                    className={`group min-h-[60px] flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer border active:scale-[0.99] ${
+                    className={`group min-h-[60px] flex items-center justify-between p-3 rounded-[12px] transition-all cursor-pointer border active:scale-[0.99] ${
                       isContainingCurrentTrack
-                        ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#0F172A] dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-white'
-                        : 'bg-[#F8FAFC] border-[#E2E8F0] hover:bg-[#EFF6FF] hover:border-[#93C5FD] text-[#0F172A] dark:bg-slate-950/40 dark:border-slate-800/70 dark:hover:bg-slate-800/60 dark:hover:border-slate-700 dark:text-slate-200'
+                        ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#0F172A] dark:bg-[#3B82F6]/15 dark:border-[#4DA8FF]/60 dark:text-[#F8FAFC]'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] hover:bg-[#EFF6FF] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:border-[#2A2D34] dark:hover:bg-[#22252B] dark:hover:border-[#3B82F6]/50 dark:text-[#F8FAFC]'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {/* Windows-style Amber Folder Icon */}
                       <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
+                        className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border transition-colors ${
                           isContainingCurrentTrack
-                            ? 'bg-amber-500 text-slate-950 border-amber-400'
-                            : 'bg-amber-100/90 border-amber-300 text-amber-600 group-hover:bg-amber-200/80 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-400 dark:group-hover:bg-amber-500/25'
+                            ? 'bg-[#3B82F6] text-white border-[#3B82F6]'
+                            : 'bg-white border-[#E2E8F0] text-[#3B82F6] dark:bg-[#1C1E22] dark:border-[#2A2D34] dark:text-[#4DA8FF]'
                         }`}
                       >
-                        <Folder className="w-5 h-5 fill-amber-400/25" />
+                        <Folder className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold truncate text-[#0F172A] group-hover:text-[#1D4ED8] dark:text-slate-100 dark:group-hover:text-amber-300 transition-colors">
+                        <p
+                          className={`text-sm font-bold truncate transition-colors ${
+                            isContainingCurrentTrack
+                              ? 'text-[#1D4ED8] dark:text-[#4DA8FF]'
+                              : 'text-[#0F172A] group-hover:text-[#1D4ED8] dark:text-[#F8FAFC] dark:group-hover:text-[#4DA8FF]'
+                          }`}
+                        >
                           {sub.name}
                         </p>
-                        <p className="text-xs text-[#475569] dark:text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
+                        <p className="text-xs text-[#475569] dark:text-[#94A3B8] truncate flex items-center gap-1.5 mt-0.5">
                           <span>{subAllTracks.length} canciones</span>
                           {subCount > 0 && (
                             <>
@@ -426,13 +422,13 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
                             e.stopPropagation();
                             onSelectTrack(subAllTracks[0], subAllTracks);
                           }}
-                          className="min-h-[40px] min-w-[40px] flex items-center justify-center p-2.5 rounded-xl bg-white hover:bg-blue-600 text-[#0F172A] hover:text-white border border-[#CBD5E1] hover:border-blue-600 dark:bg-slate-800/80 dark:hover:bg-blue-600 dark:text-slate-300 dark:hover:text-white dark:border-transparent transition-colors shadow-2xs dark:shadow-none"
+                          className="w-9 h-9 flex items-center justify-center rounded-[10px] bg-white hover:bg-[#3B82F6] text-[#0F172A] hover:text-white border border-[#E2E8F0] hover:border-[#3B82F6] dark:bg-[#1C1E22] dark:hover:bg-[#3B82F6] dark:text-[#F8FAFC] dark:border-[#2A2D34] transition-colors"
                           title={`Reproducir carpeta ${sub.name}`}
                         >
                           <Play className="w-4 h-4 fill-current" />
                         </button>
                       )}
-                      <ChevronRight className="w-5 h-5 text-[#475569] group-hover:text-[#0F172A] dark:text-slate-500 dark:group-hover:text-slate-300 transition-colors" />
+                      <ChevronRight className="w-4 h-4 text-[#475569] group-hover:text-[#0F172A] dark:text-[#94A3B8] dark:group-hover:text-[#F8FAFC] transition-colors" />
                     </div>
                   </div>
                 );
@@ -445,23 +441,23 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         {(displayedTracks.length > 0 || activeSubfolders.length === 0) && (
           <div>
             <div className="flex items-center justify-between px-1 mb-2">
-              <h3 className="text-xs font-bold text-[#475569] dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Music className="w-3.5 h-3.5 text-[#1D4ED8] dark:text-blue-400" />
+              <h3 className="text-xs font-bold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider flex items-center gap-1.5">
+                <Music className="w-3.5 h-3.5 text-[#3B82F6] dark:text-[#4DA8FF]" />
                 <span>
                   {searchQuery
                     ? `Canciones encontradas (${displayedTracks.length})`
                     : viewMode === 'all-tracks'
                     ? `Todas las canciones (${displayedTracks.length})`
-                    : `Archivos de audio en ${activeFolder.name} (${displayedTracks.length})`}
+                    : `Pistas en ${activeFolder.name} (${displayedTracks.length})`}
                 </span>
               </h3>
             </div>
 
             {displayedTracks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-center p-6 text-[#475569] dark:text-slate-500 bg-[#F8FAFC] dark:bg-transparent border border-dashed border-[#CBD5E1] dark:border-slate-800 rounded-2xl">
+              <div className="flex flex-col items-center justify-center h-40 text-center p-6 text-[#475569] dark:text-[#94A3B8] bg-[#F8FAFC] dark:bg-[#16181C] border border-dashed border-[#E2E8F0] dark:border-[#2A2D34] rounded-[12px]">
                 <Music className="w-8 h-8 mb-2 opacity-50" />
-                <p className="text-sm font-semibold text-[#0F172A] dark:text-slate-400">No hay canciones sueltas en esta carpeta</p>
-                <p className="text-xs text-[#475569] dark:text-slate-600 mt-1">
+                <p className="text-sm font-semibold text-[#0F172A] dark:text-[#F8FAFC]">No hay canciones sueltas en esta carpeta</p>
+                <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
                   {activeSubfolders.length > 0
                     ? 'Toca cualquiera de las carpetas superiores para abrir sus canciones.'
                     : 'Añade archivos .mp3 o .flac en tu carpeta "mimusica" de Google Drive.'}
@@ -477,18 +473,18 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
                     <div
                       key={track.id}
                       onClick={() => onSelectTrack(track, displayedTracks)}
-                      className={`group min-h-[60px] flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer border active:scale-[0.99] ${
+                      className={`group min-h-[60px] flex items-center justify-between p-3 rounded-[12px] transition-all cursor-pointer border active:scale-[0.99] ${
                         isCurrent
-                          ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#0F172A] dark:bg-blue-600/15 dark:border-blue-500/40 dark:text-white'
-                          : 'bg-[#F8FAFC] border-[#E2E8F0] hover:bg-[#EFF6FF] hover:border-[#93C5FD] text-[#0F172A] dark:bg-slate-950/30 dark:border-slate-800/60 dark:hover:bg-slate-800/50 dark:text-slate-300'
+                          ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#0F172A] dark:bg-[#3B82F6]/15 dark:border-[#4DA8FF]/60 dark:text-[#F8FAFC]'
+                          : 'bg-[#F8FAFC] border-[#E2E8F0] hover:bg-[#EFF6FF] hover:border-[#93C5FD] text-[#0F172A] dark:bg-[#16181C] dark:border-[#2A2D34] dark:hover:bg-[#22252B] dark:hover:border-[#3B82F6]/50 dark:text-[#F8FAFC]'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border transition-colors ${
+                          className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 border transition-colors ${
                             isCurrent
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white border-[#CBD5E1] text-[#475569] group-hover:bg-blue-50 group-hover:text-[#1D4ED8] group-hover:border-[#93C5FD] dark:bg-slate-800 dark:border-transparent dark:text-slate-400 dark:group-hover:bg-slate-700 dark:group-hover:text-slate-200'
+                              ? 'bg-[#3B82F6] text-white border-[#3B82F6]'
+                              : 'bg-white border-[#E2E8F0] text-[#475569] group-hover:text-[#3B82F6] dark:bg-[#1C1E22] dark:border-[#2A2D34] dark:text-[#94A3B8] dark:group-hover:text-[#4DA8FF]'
                           }`}
                         >
                           {isCurrent && isPlaying ? (
@@ -498,25 +494,25 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
                               <span className="w-1 bg-white animate-bounce h-4/5 delay-150"></span>
                             </div>
                           ) : (
-                            <Music className="w-5 h-5" />
+                            <Music className="w-4 h-4" />
                           )}
                         </div>
                         <div className="min-w-0">
                           <p
                             className={`text-sm truncate ${
                               isCurrent
-                                ? 'text-[#1D4ED8] dark:text-blue-400 font-bold'
-                                : 'text-[#0F172A] dark:text-slate-200 font-semibold'
+                                ? 'text-[#1D4ED8] dark:text-[#4DA8FF] font-bold'
+                                : 'text-[#0F172A] dark:text-[#F8FAFC] font-semibold'
                             }`}
                           >
                             {track.name}
                           </p>
-                          <p className="text-xs text-[#475569] dark:text-slate-400 truncate flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-[#475569] dark:text-[#94A3B8] truncate flex items-center gap-2 mt-0.5">
                             <span>{track.album || track.artist || 'mimusica'}</span>
                             {track.size ? (
                               <>
                                 <span aria-hidden="true">·</span>
-                                <span className="font-mono tabular-nums text-[11px] text-[#475569] dark:text-slate-500">
+                                <span className="font-mono tabular-nums text-[11px]">
                                   {formatFileSize(track.size)}
                                 </span>
                               </>
@@ -527,7 +523,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
 
                       <div className="flex items-center gap-2 shrink-0 ml-2">
                         {isOffline ? (
-                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#DCFCE7] border border-[#86EFAC] text-[#15803D] dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400 text-[10px] font-bold tracking-wide">
+                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#DCFCE7] border border-[#86EFAC] text-[#15803D] dark:bg-emerald-500/10 dark:border-emerald-500/25 dark:text-emerald-400 text-[10px] font-bold tracking-wide">
                             <CheckCircle2 className="w-3 h-3" />
                             OFFLINE
                           </span>
@@ -537,7 +533,7 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
                               e.stopPropagation();
                               onDownloadTrack(track);
                             }}
-                            className="min-h-[40px] min-w-[40px] flex items-center justify-center p-2 rounded-xl text-[#475569] hover:text-[#0F172A] hover:bg-white border border-transparent hover:border-[#CBD5E1] dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 dark:hover:border-transparent transition-colors"
+                            className="w-9 h-9 flex items-center justify-center rounded-[10px] text-[#475569] hover:text-[#0F172A] bg-white hover:bg-[#EFF6FF] border border-[#E2E8F0] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC] dark:bg-[#1C1E22] dark:hover:bg-[#22252B] dark:border-[#2A2D34] transition-colors"
                             title="Guardar en caché anti-túneles"
                           >
                             <Download className="w-4 h-4" />

@@ -12,7 +12,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isPlayingRef = useRef<boolean>(isPlaying);
 
-  // Persistent animation state across frames
   const barValuesRef = useRef<Float32Array>(new Float32Array(BAR_COUNT));
   const peakValuesRef = useRef<Float32Array>(new Float32Array(BAR_COUNT));
   const peakVelocitiesRef = useRef<Float32Array>(new Float32Array(BAR_COUNT));
@@ -30,15 +29,15 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let logicalWidth = canvas.clientWidth || 520;
-    let logicalHeight = canvas.clientHeight || 84;
+    let logicalWidth = canvas.clientWidth || 560;
+    let logicalHeight = canvas.clientHeight || 88;
 
     const updateCanvasResolution = () => {
       if (!canvas) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       const rect = canvas.getBoundingClientRect();
-      logicalWidth = Math.max(240, rect.width || 520);
-      logicalHeight = Math.max(44, rect.height || 84);
+      logicalWidth = Math.max(240, rect.width || 560);
+      logicalHeight = Math.max(48, rect.height || 88);
 
       canvas.width = Math.round(logicalWidth * dpr);
       canvas.height = Math.round(logicalHeight * dpr);
@@ -91,29 +90,24 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
       phaseRef.current += 0.048;
       const t = phaseRef.current;
 
-      const halfCount = BAR_COUNT / 2; // 28 bars per side, mirrored from center
+      const halfCount = BAR_COUNT / 2;
       let allSettledAtRest = true;
 
       for (let i = 0; i < BAR_COUNT; i++) {
-        // Distance from center (0 = center bass, 1 = outer treble)
         const distFromCenter = Math.abs(i - (halfCount - 0.5)) / halfCount;
         let targetAmplitude = 0;
 
         if (activePlaying) {
           if (hasRealAudioData) {
-            // Map frequency bins symmetrically: low bass in the center, mids & highs towards the edges
             const binIndex = Math.min(
               FFT_BINS - 1,
               Math.floor(Math.pow(distFromCenter, 1.15) * 48) + (i % 2)
             );
             const rawVal = freqData[binIndex] / 255;
-            // Perceptual high-frequency lift so outer bars remain expressive
             const eqLift = 1 + distFromCenter * 0.65;
-            // Subtle center envelope for automotive aesthetics
             const envelope = 1 - Math.pow(distFromCenter, 2.2) * 0.25;
             targetAmplitude = Math.min(1, Math.pow(rawVal * eqLift, 1.1) * envelope);
           } else {
-            // Organic multi-harmonic fallback simulation when CORS blocks AnalyserNode or stream returns 0s
             const bassPulse =
               Math.pow(0.5 + 0.5 * Math.sin(t * 1.45), 2.2) * Math.exp(-distFromCenter * 2.4);
             const midWave =
@@ -134,7 +128,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
           targetAmplitude = 0;
         }
 
-        // Fast attack, smooth decay physics
         const current = bars[i];
         if (targetAmplitude > current) {
           bars[i] = current + (targetAmplitude - current) * 0.38;
@@ -148,12 +141,11 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
           allSettledAtRest = false;
         }
 
-        // Peak-hold cap gravity physics
         if (bars[i] >= peaks[i]) {
           peaks[i] = bars[i];
           peakVels[i] = 0;
         } else {
-          peakVels[i] += 0.0012; // Smooth downward gravity acceleration
+          peakVels[i] += 0.0012;
           peaks[i] = Math.max(0, peaks[i] - peakVels[i]);
         }
 
@@ -164,7 +156,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
         }
       }
 
-      // Clear canvas
       ctx.clearRect(0, 0, logicalWidth, logicalHeight);
 
       const isLightMode = !document.documentElement.classList.contains('dark') &&
@@ -172,33 +163,16 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
 
       const centerY = logicalHeight / 2;
       const maxHalfHeight = Math.max(12, centerY - 6);
-      const minHalfHeight = 2.2; // Resting line capsule radius
+      const minHalfHeight = 2.4;
 
-      // Calculate bar width and gap across 56 symmetric bars
-      const horizontalPadding = 6;
+      const horizontalPadding = 8;
       const availableWidth = logicalWidth - horizontalPadding * 2;
       const step = availableWidth / BAR_COUNT;
-      const barWidth = Math.max(2.5, Math.min(6.5, step * 0.64));
+      const barWidth = Math.max(3, Math.min(6.5, step * 0.62));
 
-      // Draw subtle center horizon line
-      ctx.fillStyle = isLightMode ? 'rgba(59, 130, 246, 0.12)' : 'rgba(77, 168, 255, 0.10)';
+      // Subtle center horizon line
+      ctx.fillStyle = isLightMode ? 'rgba(148, 163, 184, 0.18)' : 'rgba(148, 163, 184, 0.12)';
       ctx.fillRect(horizontalPadding, centerY - 0.5, availableWidth, 1);
-
-      // Build vertical symmetric luminous gradient (Cyan/Electric Blue #4DA8FF at peaks -> Deep Blue in center)
-      const barGradient = ctx.createLinearGradient(0, centerY - maxHalfHeight, 0, centerY + maxHalfHeight);
-      if (isLightMode) {
-        barGradient.addColorStop(0, '#0284C7');
-        barGradient.addColorStop(0.22, '#2563EB');
-        barGradient.addColorStop(0.5, '#1E40AF');
-        barGradient.addColorStop(0.78, '#2563EB');
-        barGradient.addColorStop(1, '#0284C7');
-      } else {
-        barGradient.addColorStop(0, '#67E8F9');    // Luminous cyan tip
-        barGradient.addColorStop(0.18, '#4DA8FF'); // Electric Tesla blue
-        barGradient.addColorStop(0.5, '#1D4ED8');  // Deep royal blue core
-        barGradient.addColorStop(0.82, '#4DA8FF'); // Electric Tesla blue
-        barGradient.addColorStop(1, '#67E8F9');    // Luminous cyan bottom tip
-      }
 
       for (let i = 0; i < BAR_COUNT; i++) {
         const amp = bars[i];
@@ -209,35 +183,41 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
         const totalH = halfH * 2;
         const y = centerY - halfH;
 
+        // Bicolor capsule distribution matching AudioCar Radio (#3B82F6 blue & #EF4444 red)
+        const isRedAccent = i % 3 === 1 || amp > 0.68;
+
         if (amp > 0.015) {
-          ctx.fillStyle = barGradient;
-          // Subtle glow on high crests
-          if (amp > 0.45 && !isLightMode) {
-            ctx.shadowColor = 'rgba(77, 168, 255, 0.55)';
-            ctx.shadowBlur = 10 * amp;
+          ctx.fillStyle = isRedAccent ? '#EF4444' : '#3B82F6';
+          if (amp > 0.5 && !isLightMode) {
+            ctx.shadowColor = isRedAccent ? 'rgba(239, 68, 68, 0.45)' : 'rgba(59, 130, 246, 0.45)';
+            ctx.shadowBlur = 8 * amp;
           } else {
             ctx.shadowBlur = 0;
           }
           drawCapsule(x, y, barWidth, totalH, barWidth / 2);
         } else {
-          // Resting state minimal capsule dot
           ctx.shadowBlur = 0;
-          ctx.fillStyle = isLightMode ? 'rgba(37, 99, 235, 0.32)' : 'rgba(77, 168, 255, 0.32)';
+          ctx.fillStyle = isRedAccent
+            ? isLightMode
+              ? 'rgba(239, 68, 68, 0.35)'
+              : 'rgba(239, 68, 68, 0.38)'
+            : isLightMode
+            ? 'rgba(59, 130, 246, 0.35)'
+            : 'rgba(59, 130, 246, 0.42)';
           drawCapsule(x, centerY - minHalfHeight, barWidth, minHalfHeight * 2, barWidth / 2);
         }
 
-        // Draw symmetric upper and lower peak-hold caps when above resting state
-        if (peakAmp > 0.06) {
+        // Peak-hold caps
+        if (peakAmp > 0.08) {
           ctx.shadowBlur = 0;
           const peakOffset = minHalfHeight + peakAmp * (maxHalfHeight - minHalfHeight) + 2.5;
           const capHeight = Math.min(2.6, barWidth * 0.65);
-          const capAlpha = Math.min(0.95, 0.35 + peakAmp * 0.65);
+          const capAlpha = Math.min(0.95, 0.4 + peakAmp * 0.6);
 
-          ctx.fillStyle = isLightMode
-            ? `rgba(2, 132, 199, ${capAlpha})`
-            : `rgba(125, 211, 252, ${capAlpha})`;
+          ctx.fillStyle = isRedAccent
+            ? `rgba(239, 68, 68, ${capAlpha})`
+            : `rgba(77, 168, 255, ${capAlpha})`;
 
-          // Top peak cap
           drawCapsule(
             x,
             Math.max(1, centerY - peakOffset - capHeight),
@@ -246,7 +226,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
             capHeight / 2
           );
 
-          // Bottom mirrored peak cap
           drawCapsule(
             x,
             Math.min(logicalHeight - capHeight - 1, centerY + peakOffset),
@@ -259,7 +238,6 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
 
       ctx.shadowBlur = 0;
 
-      // Stop requestAnimationFrame loop when paused and all bars have settled to resting line
       if (!activePlaying && allSettledAtRest) {
         rafIdRef.current = null;
         return;
@@ -299,14 +277,12 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying }) =
   }, [isPlaying]);
 
   return (
-    <div className="w-full max-w-[640px] px-2 mt-5 [@media(max-height:750px)]:mt-2.5 flex flex-col items-center">
-      <div className="w-full h-20 sm:h-24 [@media(max-height:750px)]:h-14 relative flex items-center justify-center">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full block"
-          aria-label="Visualizador de espectro de audio de 56 bandas"
-        />
-      </div>
+    <div className="w-full h-24 sm:h-28 [@media(max-height:750px)]:h-20 relative flex items-center justify-center">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full block"
+        aria-label="Visualizador de espectro de onda en tiempo real"
+      />
     </div>
   );
 };
