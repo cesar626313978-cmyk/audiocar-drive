@@ -93,8 +93,11 @@ export default function App() {
   const [teslaShiftState, setTeslaShiftState] = useState<string | null>(null);
   const isReverseDimmedRef = useRef<boolean>(false);
 
-  // Atomic playRequestIdRef to prevent UI/Audio desynchronization on rapid skips
+  // Atomic playRequestIdRef & currentStationRef to prevent stale closures on Tesla steering wheel controls
   const playRequestIdRef = useRef<number>(0);
+  const currentStationRef = useRef<Track | null>(playbackState.currentTrack);
+  const tokenRef = useRef<string | null>(token);
+  const settingsRef = useRef<AudioSettings>(settings);
   const nextTrackRef = useRef<() => void>(() => {});
   const prevTrackRef = useRef<() => void>(() => {});
   const playbackStateRef = useRef<PlaybackState>(playbackState);
@@ -102,7 +105,16 @@ export default function App() {
 
   useEffect(() => {
     playbackStateRef.current = playbackState;
+    currentStationRef.current = playbackState.currentTrack;
   }, [playbackState]);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     activeFolderRef.current = { id: activeFolderId, name: folderName };
@@ -176,6 +188,59 @@ export default function App() {
       // ignore
     }
 
+    // Permanent steering wheel play/pause handlers bound to currentStationRef
+    const handleMediaSessionPlay = async () => {
+      const stationOrTrack =
+        currentStationRef.current || playbackStateRef.current.currentTrack || playbackStateRef.current.queue[0] || null;
+      if (!stationOrTrack) return;
+
+      setShowResumeOverlay(false);
+      setPlaybackState((prev) => ({
+        ...prev,
+        currentTrack: stationOrTrack,
+        isPlaying: true
+      }));
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = 'playing';
+        } catch {
+          // ignore
+        }
+      }
+
+      // If audio element already has active buffer loaded and paused, resume immediately; otherwise reload with atomic playRequestIdRef
+      if (audioEngine.hasLoadedSourceFor(stationOrTrack.id)) {
+        const resumed = audioEngine.resumeOrReloadActiveTrack();
+        if (resumed) {
+          persistDriveSession({ track: stationOrTrack, wasPlaying: true });
+          return;
+        }
+      }
+
+      const reqId = ++playRequestIdRef.current;
+      const activeTok = tokenRef.current || GoogleDriveAuth.getStoredToken();
+      const resumeSec = audioEngine.getCurrentTime() || playbackStateRef.current.currentTime || 0;
+      try {
+        const { isOffline } = await audioEngine.playTrack(
+          stationOrTrack,
+          activeTok,
+          settingsRef.current,
+          resumeSec
+        );
+        if (reqId !== playRequestIdRef.current) return;
+        setPlaybackState((prev) => ({ ...prev, isPlaying: true, isOffline }));
+        persistDriveSession({ track: stationOrTrack, wasPlaying: true });
+      } catch (e) {
+        console.error('Steering wheel MediaSession play error:', e);
+      }
+    };
+
+    const handleMediaSessionPause = () => {
+      audioEngine.pausePlaybackPreservingSession();
+      setPlaybackState((prev) => ({ ...prev, isPlaying: false }));
+      persistDriveSession({ wasPlaying: false });
+    };
+
     audioEngine.setCallbacks(
       (time, duration) => {
         setPlaybackState((prev) => ({
@@ -198,7 +263,9 @@ export default function App() {
       },
       () => {
         nextTrackRef.current();
-      }
+      },
+      handleMediaSessionPlay,
+      handleMediaSessionPause
     );
 
     audioEngine.updateSettings(settings);

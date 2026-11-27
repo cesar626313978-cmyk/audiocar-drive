@@ -27,6 +27,9 @@ export class AudioEngine {
   private onStateChangeCallback: ((isPlaying: boolean) => void) | null = null;
   private onPrevTrackCallback: (() => void) | null = null;
   private onNextTrackCallback: (() => void) | null = null;
+  private onPlayActionCallback: (() => void) | null = null;
+  private onPauseActionCallback: (() => void) | null = null;
+  private mediaSessionHandlersRegistered: boolean = false;
 
   private positionStateInterval: any = null;
 
@@ -36,6 +39,7 @@ export class AudioEngine {
     this.audio.preload = 'auto';
     this.audio.dataset.engine = 'audiocar-drive-primary';
     this.setupListeners();
+    this.registerExclusiveMediaSessionHandlers();
   }
 
   public getCurrentRequestId(): number {
@@ -65,6 +69,10 @@ export class AudioEngine {
 
   public isAudioPlaying(): boolean {
     return !this.audio.paused && this.audio.readyState >= 2;
+  }
+
+  public hasLoadedSourceFor(trackId: string): boolean {
+    return Boolean(this.audio.src && this.activeTrack?.id === trackId && this.audio.readyState >= 1);
   }
 
   /**
@@ -231,6 +239,9 @@ export class AudioEngine {
     this.audio.addEventListener('pause', () => {
       if ('mediaSession' in navigator) {
         try {
+          if (this.activeTrack && !navigator.mediaSession.metadata) {
+            this.updateMediaSessionMetadata(this.activeTrack);
+          }
           navigator.mediaSession.playbackState = 'paused';
         } catch {
           // ignore
@@ -266,43 +277,54 @@ export class AudioEngine {
     onTrackEnd: () => void,
     onStateChange: (isPlaying: boolean) => void,
     onPrevTrack?: () => void,
-    onNextTrack?: () => void
+    onNextTrack?: () => void,
+    onPlayAction?: () => void,
+    onPauseAction?: () => void
   ) {
     this.onTimeUpdateCallback = onTimeUpdate;
     this.onTrackEndCallback = onTrackEnd;
     this.onStateChangeCallback = onStateChange;
     if (onPrevTrack) this.onPrevTrackCallback = onPrevTrack;
     if (onNextTrack) this.onNextTrackCallback = onNextTrack;
-    this.registerExclusiveMediaSessionHandlers();
+    if (onPlayAction) this.onPlayActionCallback = onPlayAction;
+    if (onPauseAction) this.onPauseActionCallback = onPauseAction;
+    this.registerExclusiveMediaSessionHandlers(true);
   }
 
-  public registerExclusiveMediaSessionHandlers() {
+  public registerExclusiveMediaSessionHandlers(force = false) {
     if (!('mediaSession' in navigator)) return;
+    if (this.mediaSessionHandlersRegistered && !force) return;
 
     try {
-      const actions: MediaSessionAction[] = ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto', 'stop'];
-      actions.forEach((action) => {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch {
-          // ignore unsupported action
+      const handlePauseOrStop = () => {
+        if (this.onPauseActionCallback) {
+          this.onPauseActionCallback();
+        } else {
+          this.pausePlaybackPreservingSession();
         }
-      });
+      };
 
-      navigator.mediaSession.setActionHandler('play', () => {
-        this.stopAllOtherAudioSources();
-        this.startAudioFocusKeepAlive();
-        this.audio.play().then(() => {
-          this.enforceTeslaExclusiveMediaSessionPlaying();
-        }).catch(() => {});
-      });
-
-      navigator.mediaSession.setActionHandler('pause', () => {
-        this.audio.pause();
+      const handlePlay = () => {
         if ('mediaSession' in navigator) {
-          navigator.mediaSession.playbackState = 'paused';
+          try {
+            if (this.activeTrack) {
+              this.updateMediaSessionMetadata(this.activeTrack);
+            }
+            navigator.mediaSession.playbackState = 'playing';
+          } catch {
+            // ignore
+          }
         }
-      });
+        if (this.onPlayActionCallback) {
+          this.onPlayActionCallback();
+        } else {
+          this.resumeOrReloadActiveTrack();
+        }
+      };
+
+      navigator.mediaSession.setActionHandler('play', handlePlay);
+      navigator.mediaSession.setActionHandler('pause', handlePauseOrStop);
+      navigator.mediaSession.setActionHandler('stop', handlePauseOrStop);
 
       navigator.mediaSession.setActionHandler('previoustrack', () => {
         if (this.onPrevTrackCallback) this.onPrevTrackCallback();
@@ -317,6 +339,8 @@ export class AudioEngine {
           this.seek(details.seekTime);
         }
       });
+
+      this.mediaSessionHandlersRegistered = true;
     } catch (e) {
       console.warn('MediaSession handler registration error:', e);
     }
@@ -589,28 +613,54 @@ export class AudioEngine {
     return true;
   }
 
+  public pausePlaybackPreservingSession() {
+    this.audio.pause();
+    if ('mediaSession' in navigator) {
+      try {
+        if (this.activeTrack && !navigator.mediaSession.metadata) {
+          this.updateMediaSessionMetadata(this.activeTrack);
+        }
+        navigator.mediaSession.playbackState = 'paused';
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  public resumeOrReloadActiveTrack(): boolean {
+    this.stopAllOtherAudioSources();
+    this.initWebAudio();
+    this.startAudioFocusKeepAlive();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    this.enforceTeslaExclusiveMediaSessionPlaying();
+
+    if (this.audio.src) {
+      this.audio
+        .play()
+        .then(() => {
+          this.enforceTeslaExclusiveMediaSessionPlaying();
+        })
+        .catch(() => {
+          if (this.onPlayActionCallback) {
+            this.onPlayActionCallback();
+          }
+        });
+      return true;
+    } else if (this.onPlayActionCallback) {
+      this.onPlayActionCallback();
+      return true;
+    }
+    return false;
+  }
+
   public togglePlayPause(): boolean {
     this.stopAllOtherAudioSources();
     if (this.audio.paused) {
-      this.initWebAudio();
-      this.startAudioFocusKeepAlive();
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume().catch(() => {});
-      }
-      this.audio.play().then(() => {
-        this.enforceTeslaExclusiveMediaSessionPlaying();
-      }).catch(() => {});
-      return true;
+      return this.resumeOrReloadActiveTrack();
     } else {
-      this.audio.pause();
-      this.stopAudioFocusKeepAlive();
-      if ('mediaSession' in navigator) {
-        try {
-          navigator.mediaSession.playbackState = 'paused';
-        } catch {
-          // ignore
-        }
-      }
+      this.pausePlaybackPreservingSession();
       return false;
     }
   }
