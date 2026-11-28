@@ -83,12 +83,12 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
   const volumePercent = Math.round((volume || 0) * 100);
 
   return (
-    <div className="flex flex-col justify-between h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] p-3.5 sm:p-4 lg:p-6 [@media(max-height:750px)]:p-3.5 shadow-sm dark:shadow-none relative overflow-hidden transition-colors">
-      {/* 1. ZONA SUPERIOR DERECHA: Carátula cuadrada redondeada (96x96px) a la izquierda + Metadatos, Título grande y Carpeta/Artista */}
-      <div className="w-full flex items-center justify-between gap-3 sm:gap-4">
-        <div className="flex items-center gap-3.5 sm:gap-5 min-w-0 flex-1">
-          {/* 96x96px Rounded Square Artwork */}
-          <div className="relative w-20 h-20 lg:w-24 lg:h-24 [@media(max-height:750px)]:w-20 [@media(max-height:750px)]:h-20 rounded-2xl overflow-hidden bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-md shrink-0 flex items-center justify-center">
+    <div className="flex flex-col justify-between h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] p-3 sm:p-4 lg:p-6 [@media(max-height:750px)]:p-3 shadow-sm dark:shadow-none relative overflow-hidden transition-colors">
+      {/* 1. ZONA SUPERIOR DERECHA: Carátula cuadrada redondeada a la izquierda + Metadatos, Título grande y Carpeta/Artista */}
+      <div className="w-full flex items-center justify-between gap-2.5 sm:gap-4">
+        <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
+          {/* Rounded Square Artwork */}
+          <div className="relative w-14 h-14 sm:w-20 sm:h-20 lg:w-24 lg:h-24 rounded-xl sm:rounded-2xl overflow-hidden bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] shadow-md shrink-0 flex items-center justify-center">
             <img
               src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&h=400&fit=crop"
               alt="Carátula"
@@ -97,43 +97,39 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
                 isPlaying ? 'scale-105' : 'scale-100'
               }`}
             />
-            <div className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-[#3B82F6]/90 backdrop-blur-xs flex items-center justify-center text-white shadow-sm">
-              <Disc className={`w-3.5 h-3.5 ${isPlaying ? 'animate-spin-slow' : ''}`} />
+            <div className="absolute bottom-1 right-1 sm:bottom-1.5 sm:right-1.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#3B82F6]/90 backdrop-blur-xs flex items-center justify-center text-white shadow-sm">
+              <Disc className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isPlaying ? 'animate-spin-slow' : ''}`} />
             </div>
           </div>
 
           {/* Left-Aligned Metadata + Large Bold Track Title + Folder/Artist */}
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-[#16A34A] dark:bg-emerald-400 animate-pulse"></span>
-                TESLA AUDIO STREAM
-              </span>
-
-              <span aria-hidden="true" className="text-[#475569] dark:text-[#94A3B8] text-xs font-bold">
-                ·
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#16A34A] dark:bg-emerald-400 animate-pulse"></span>
+                TESLA STREAM
               </span>
 
               {isOffline ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  OFFLINE READY
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30">
+                  <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  OFFLINE
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD] dark:bg-[#3B82F6]/15 dark:text-[#4DA8FF] dark:border-[#3B82F6]/30">
-                  <Radio className="w-3.5 h-3.5" />
-                  CLOUD STREAM
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-[#DBEAFE] text-[#1D4ED8] border border-[#93C5FD] dark:bg-[#3B82F6]/15 dark:text-[#4DA8FF] dark:border-[#3B82F6]/30">
+                  <Radio className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  CLOUD
                 </span>
               )}
 
               {hasTeslaSession && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#F8FAFC] text-[#0F172A] border border-[#E2E8F0] dark:bg-[#16181C] dark:text-[#4DA8FF] dark:border-[#2A2D34]">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-[#F8FAFC] text-[#0F172A] border border-[#E2E8F0] dark:bg-[#16181C] dark:text-[#4DA8FF] dark:border-[#2A2D34]">
                   Fleet API {teslaShiftState ? `[${teslaShiftState}]` : ''}
                 </span>
               )}
             </div>
 
-            <h2 className="text-lg sm:text-xl lg:text-2xl [@media(max-height:750px)]:text-base font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate leading-tight">
+            <h2 className="text-base sm:text-xl lg:text-2xl font-bold text-[#0F172A] dark:text-[#F8FAFC] truncate leading-tight">
               {currentTrack?.name || 'Selecciona una pista'}
             </h2>
             <p className="text-xs sm:text-sm font-medium text-[#475569] dark:text-[#94A3B8] truncate mt-0.5">
@@ -141,29 +137,18 @@ export const PlayerPanel: React.FC<PlayerPanelProps> = ({
             </p>
           </div>
         </div>
-
-        {onOpenFolders && (
-          <button
-            onClick={onOpenFolders}
-            className="lg:hidden h-[42px] px-4 rounded-xl bg-[#3B82F6] hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-sm shadow-[#3B82F6]/25 flex items-center gap-1.5 shrink-0 transition-all"
-            title="Ver lista de carpetas y canciones"
-          >
-            <Folder className="w-4 h-4" />
-            <span>☰ Carpetas</span>
-          </button>
-        )}
       </div>
 
       {/* 2. ZONA CENTRAL DERECHA: Visualizador Bicolor + Encabezado Espectro/EQ + Barra de Progreso Interactiva */}
-      <div className="w-full my-auto py-1.5 lg:py-3 [@media(max-height:750px)]:py-1.5 space-y-2.5 lg:space-y-3.5 [@media(max-height:750px)]:space-y-2 relative">
+      <div className="w-full my-auto py-1 sm:py-1.5 lg:py-3 space-y-2 sm:space-y-2.5 lg:space-y-3.5 relative">
         {/* Spectrum Box */}
-        <div className="w-full bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-2xl p-2.5 sm:p-3 lg:p-4 [@media(max-height:750px)]:p-2.5">
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="font-semibold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider">
-              Espectro de Onda en Tiempo Real
+        <div className="w-full bg-[#F8FAFC] dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-xl sm:rounded-2xl p-2.5 sm:p-3 lg:p-4">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs mb-1.5 sm:mb-2 gap-2">
+            <span className="font-semibold text-[#475569] dark:text-[#94A3B8] uppercase tracking-wider truncate">
+              Espectro de Onda
             </span>
-            <span className="font-mono font-semibold text-[#3B82F6] dark:text-[#4DA8FF]">
-              EQ: {formatEqVal(eqBands.bass)} / {formatEqVal(eqBands.mid)} / {formatEqVal(eqBands.treble)} dB
+            <span className="font-mono font-semibold text-[#3B82F6] dark:text-[#4DA8FF] shrink-0">
+              EQ: {formatEqVal(eqBands.bass)}/{formatEqVal(eqBands.mid)}/{formatEqVal(eqBands.treble)} dB
             </span>
           </div>
 

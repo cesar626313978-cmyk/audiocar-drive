@@ -172,22 +172,22 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] shadow-sm dark:shadow-none p-3.5 sm:p-4 overflow-hidden transition-colors">
+    <div className="flex flex-col h-full bg-white dark:bg-[#1C1E22] rounded-2xl border border-[#E2E8F0] dark:border-[#2A2D34] shadow-sm dark:shadow-none p-2.5 sm:p-4 overflow-hidden transition-colors">
       {/* Top Search & Mode Bar */}
-      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 mb-3">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#475569] dark:text-[#94A3B8]" />
+      <div className="flex items-center gap-2 mb-2.5 sm:mb-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#475569] dark:text-[#94A3B8]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar carpeta o canción..."
-            className="w-full min-h-[42px] pl-10 pr-8 py-2 bg-white dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-[12px] text-sm text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#475569] dark:placeholder-[#94A3B8] focus:outline-none focus:border-[#3B82F6] dark:focus:border-[#4DA8FF] transition-colors"
+            className="w-full h-10 pl-9 pr-8 py-1.5 bg-white dark:bg-[#16181C] border border-[#E2E8F0] dark:border-[#2A2D34] rounded-xl text-xs sm:text-sm text-[#0F172A] dark:text-[#F8FAFC] placeholder-[#475569] dark:placeholder-[#94A3B8] focus:outline-none focus:border-[#3B82F6] dark:focus:border-[#4DA8FF] transition-colors"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]"
               title="Limpiar búsqueda"
             >
               <X className="w-4 h-4" />
@@ -196,20 +196,20 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
         </div>
 
         {/* Toggle Explorer vs All Tracks */}
-        <div className="flex items-center bg-[#F8FAFC] dark:bg-[#16181C] p-1 rounded-[12px] border border-[#E2E8F0] dark:border-[#2A2D34] shrink-0">
+        <div className="flex items-center bg-[#F8FAFC] dark:bg-[#16181C] p-1 rounded-xl border border-[#E2E8F0] dark:border-[#2A2D34] shrink-0">
           <button
             onClick={() => {
               setViewMode('explorer');
               setSearchQuery('');
             }}
-            className={`min-h-[34px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`h-8 flex items-center gap-1 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors ${
               viewMode === 'explorer' && !searchQuery
                 ? 'bg-[#3B82F6] text-white shadow-xs'
                 : 'text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
             }`}
             title="Explorador por carpetas"
           >
-            <Folder className="w-3.5 h-3.5" />
+            <Folder className="w-3.5 h-3.5 shrink-0" />
             <span>Carpetas</span>
           </button>
           <button
@@ -217,28 +217,17 @@ export const FolderExplorer: React.FC<FolderExplorerProps> = ({
               setViewMode('all-tracks');
               setSearchQuery('');
             }}
-            className={`min-h-[34px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            className={`h-8 flex items-center gap-1 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors ${
               viewMode === 'all-tracks' && !searchQuery
                 ? 'bg-[#3B82F6] text-white shadow-xs'
                 : 'text-[#475569] hover:text-[#0F172A] dark:text-[#94A3B8] dark:hover:text-[#F8FAFC]'
             }`}
             title="Ver todas las canciones"
           >
-            <Music className="w-3.5 h-3.5" />
+            <Music className="w-3.5 h-3.5 shrink-0" />
             <span>Todas ({allLibraryTracks.length})</span>
           </button>
         </div>
-
-        {onSwitchToPlayer && (
-          <button
-            onClick={onSwitchToPlayer}
-            className="lg:hidden min-h-[42px] px-3.5 py-2 rounded-[12px] bg-[#3B82F6] hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-sm shadow-[#3B82F6]/25 flex items-center gap-1.5 shrink-0 transition-all"
-            title="Volver a la vista principal del reproductor"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>▶ Reproductor</span>
-          </button>
-        )}
       </div>
 
       {/* Breadcrumb Bar with [Aleatorio] and [Reproducir] */}
