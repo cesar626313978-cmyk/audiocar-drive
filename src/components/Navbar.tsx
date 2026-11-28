@@ -68,50 +68,50 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* 2. Right / Unified Action Bar (identical width and layout across both screens to prevent layout shift) */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* 2. Right / Unified Action Bar (compact in 740px-1023px so all buttons + avatar fit without right overflow) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2.5 shrink-0">
           <button
             onClick={() => {
               window.location.href = '/';
             }}
-            className="h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] rounded-lg sm:rounded-xl transition-colors border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] whitespace-nowrap shrink-0"
+            className="h-8 sm:h-9 px-2 sm:px-2.5 lg:px-3.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] rounded-lg sm:rounded-xl transition-colors border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] whitespace-nowrap shrink-0"
             title="Volver al Launcher / Hub"
           >
             <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
-            <span className="hidden md:inline">Inicio / Hub</span>
+            <span className="hidden lg:inline">Inicio / Hub</span>
           </button>
 
           <button
             onClick={onOpenSettings}
-            className="h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-xl text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap shrink-0"
+            className="h-8 sm:h-9 px-2 sm:px-2.5 lg:px-3.5 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-xl text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap shrink-0"
             title="Ecualizador 3 Bandas y Ajustes"
           >
             <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#3B82F6] dark:text-[#4DA8FF] shrink-0" />
-            <span className="hidden md:inline">Ecualizador 3B</span>
+            <span className="hidden lg:inline">Ecualizador 3B</span>
           </button>
 
           <button
             onClick={onToggleTheme}
-            className="h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-xl text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap shrink-0"
+            className="h-8 sm:h-9 px-2 sm:px-2.5 lg:px-3.5 flex items-center justify-center gap-1.5 rounded-lg sm:rounded-xl text-xs font-semibold text-[#0F172A] dark:text-[#F8FAFC] bg-[#F8FAFC] dark:bg-[#16181C] hover:bg-[#EFF6FF] dark:hover:bg-[#22252B] border border-[#E2E8F0] hover:border-[#93C5FD] dark:border-[#2A2D34] transition-colors whitespace-nowrap shrink-0"
             title="Cambiar entre Modo Día y Modo Noche"
           >
             {theme === 'dark' ? (
               <>
                 <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
-                <span className="hidden md:inline">Modo Día</span>
+                <span className="hidden lg:inline">Modo Día</span>
               </>
             ) : (
               <>
                 <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#475569] shrink-0" />
-                <span className="hidden md:inline">Modo Noche</span>
+                <span className="hidden lg:inline">Modo Noche</span>
               </>
             )}
           </button>
 
-          {/* Compact fixed-width responsive view switcher (< 1024px) */}
+          {/* Compact fixed-width responsive view switcher (only shown when single-column mode is active) */}
           <button
             onClick={onToggleMobileView}
-            className="lg:hidden h-8 sm:h-9 w-[86px] sm:w-[108px] px-2 sm:px-2.5 rounded-lg sm:rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-colors border whitespace-nowrap bg-[#3B82F6] hover:bg-blue-500 text-white border-[#3B82F6] shadow-xs shrink-0"
+            className="lg:hidden [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:hidden h-8 sm:h-9 w-[86px] sm:w-[104px] px-2 sm:px-2.5 rounded-lg sm:rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-colors border whitespace-nowrap bg-[#3B82F6] hover:bg-blue-500 text-white border-[#3B82F6] shadow-xs shrink-0"
             title={mobileView === 'player' ? 'Ver Lista de Carpetas y Canciones' : 'Ver Reproductor'}
           >
             {mobileView === 'player' ? (

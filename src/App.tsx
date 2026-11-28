@@ -837,11 +837,13 @@ export default function App() {
       )}
 
       {/* Main Responsive Twin-Cabin Grid Layout identical to AudioCar Radio */}
-      <main className="flex-1 min-h-0 max-h-[calc(100dvh-64px)] p-2.5 sm:p-3 lg:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-5 max-w-[1600px] w-full mx-auto overflow-hidden">
+      <main className="flex-1 min-h-0 max-h-[calc(100dvh-56px)] sm:max-h-[calc(100dvh-64px)] p-2.5 sm:p-3 lg:p-5 [@media(max-height:750px)]:p-2.5 grid grid-cols-1 lg:grid-cols-12 [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:grid-cols-12 gap-3 sm:gap-4 lg:gap-5 max-w-[1600px] w-full mx-auto overflow-hidden">
         {/* Left Column: Folder Explorer */}
         <div
-          className={`lg:col-span-5 xl:col-span-5 h-full min-h-0 ${
-            mobileView === 'library' ? 'block' : 'hidden lg:block'
+          className={`lg:col-span-5 [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:col-span-5 xl:col-span-5 h-full min-h-0 ${
+            mobileView === 'library'
+              ? 'block'
+              : 'hidden lg:block [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:block'
           }`}
         >
           <FolderExplorer
@@ -856,7 +858,11 @@ export default function App() {
             }}
             onSelectTrack={(track, list, enableShuffle) => {
               handleSelectTrack(track, list, enableShuffle);
-              if (window.innerWidth < 1024) {
+              const isPanoramic =
+                window.matchMedia(
+                  '(min-width: 1024px), ((orientation: landscape) and (min-width: 740px) and (min-height: 480px))'
+                ).matches;
+              if (!isPanoramic) {
                 setMobileView('player');
               }
             }}
@@ -868,8 +874,10 @@ export default function App() {
 
         {/* Right Column: Unified Player Panel identical to AudioCar Radio */}
         <div
-          className={`lg:col-span-7 xl:col-span-7 h-full min-h-0 ${
-            mobileView === 'player' ? 'block' : 'hidden lg:block'
+          className={`lg:col-span-7 [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:col-span-7 xl:col-span-7 h-full min-h-0 ${
+            mobileView === 'player'
+              ? 'block'
+              : 'hidden lg:block [@media(orientation:landscape)_and_(min-width:740px)_and_(min-height:480px)]:block'
           }`}
         >
           <PlayerPanel

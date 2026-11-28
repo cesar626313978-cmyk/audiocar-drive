@@ -1,0 +1,10 @@
+{
+  "name": "AudioCar Drive",
+  "short_name": "AudioCar Drive",
+  "description": "Tesla-optimized Google Drive streaming music player with dual-player crossfade and anti-tunnel IndexedDB cache.",
+  "start_url": "/drive/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#121316",
+  "theme_color": "#3B82F6"
+}
